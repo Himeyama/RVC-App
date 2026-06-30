@@ -1,6 +1,6 @@
 # RVC-App
 
-
+![](docs/image.png)
 
 VITS ベースの音声変換フレームワーク [RVC-Project/Retrieval-based-Voice-Conversion-WebUI](https://github.com/RVC-Project/Retrieval-based-Voice-Conversion-WebUI) のフォークです。Windows 環境での利用に特化し、依存管理の現代化と UI の刷新を進めています。ライセンスは上流と同じ MIT を維持しています。
 
