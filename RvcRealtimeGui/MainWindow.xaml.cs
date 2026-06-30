@@ -15,6 +15,12 @@ public sealed partial class MainWindow : Window
     CancellationTokenSource? _metricsCts;
     CancellationTokenSource? _statusCts;
     bool _suppressHostApiChanged;
+    bool _vcRunning;
+
+    PseudoConsole? _pty;
+    // ターミナルのテキストバッファ（UI スレッドのみ触る）
+    readonly System.Text.StringBuilder _termBuf = new();
+    const int TermMaxChars = 200_000;
 
     public MainWindow()
     {
@@ -30,19 +36,22 @@ public sealed partial class MainWindow : Window
         {
             _metricsCts?.Cancel();
             _statusCts?.Cancel();
+            _pty?.Stop();
             _api.Dispose();
         };
     }
 
+    // ── 初期化 ──────────────────────────────────────────────────
+
     async Task InitializeAsync()
     {
-        if (_statusCts is not null) return;  // 二重初期化防止
+        if (_statusCts is not null) return;
         _statusCts = new CancellationTokenSource();
         _ = PollServerStatusAsync(_statusCts.Token);
 
         if (!await _api.PingAsync().ConfigureAwait(true))
         {
-            ServerLabel.Text = "未接続 (api_gui.py を起動してください)";
+            ServerLabel.Text = "未接続";
             return;
         }
 
@@ -151,7 +160,112 @@ public sealed partial class MainWindow : Window
         };
     }
 
+    // ── 変換状態 UI 更新 ────────────────────────────────────────
+
+    void SetVcRunning(bool running)
+    {
+        _vcRunning = running;
+        if (running)
+        {
+            ToggleVcText.Text = "音声変換 停止";
+            ToolTipService.SetToolTip(ToggleVcBtn, "音声変換 停止");
+            VcStatusLabel.Text = "変換中";
+            VcStatusLabel.Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["SystemFillColorSuccessBrush"];
+        }
+        else
+        {
+            ToggleVcText.Text = "音声変換 開始";
+            ToolTipService.SetToolTip(ToggleVcBtn, "音声変換 開始");
+            DelayLabel.Text = "— ms";
+            InferLabel.Text = "— ms";
+            VcStatusLabel.Text = "停止中";
+            VcStatusLabel.Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorSecondaryBrush"];
+        }
+    }
+
+    // ── ターミナル ───────────────────────────────────────────────
+
+    void AppendTerminal(string text)
+    {
+        // 改行コードを統一
+        text = text.Replace("\r\n", "\n").Replace("\r", "\n");
+
+        if (_termBuf.Length + text.Length > TermMaxChars)
+        {
+            // 古い部分を切り捨て
+            int keep = TermMaxChars / 2;
+            _termBuf.Remove(0, _termBuf.Length - keep);
+        }
+        _termBuf.Append(text);
+        TerminalText.Text = _termBuf.ToString();
+
+        // 末尾にスクロール
+        TerminalScroll.ChangeView(null, TerminalScroll.ScrollableHeight, null);
+    }
+
+    void SetServerRunning(bool running)
+    {
+        if (running)
+        {
+            ToggleServerText.Text = "サーバー停止";
+            ToggleServerIcon.Glyph = "";  // Stop
+            ToolTipService.SetToolTip(ToggleServerBtn, "api_gui.py を停止");
+        }
+        else
+        {
+            ToggleServerText.Text = "サーバー起動";
+            ToggleServerIcon.Glyph = "";  // Play/Server
+            ToolTipService.SetToolTip(ToggleServerBtn, "api_gui.py を起動");
+        }
+    }
+
+    void StartServerProcess()
+    {
+        _pty?.Dispose();
+        _pty = new PseudoConsole(text => _dispatcher.TryEnqueue(() => AppendTerminal(text)), _dispatcher);
+
+        string projectRoot = System.IO.Path.GetFullPath(
+            System.IO.Path.Combine(AppContext.BaseDirectory, @"..\..\..\..\.."));
+        string apiScript = System.IO.Path.Combine(projectRoot, "api_gui.py");
+        string cmd = $"uv run python \"{apiScript}\"";
+
+        try
+        {
+            _pty.Start(cmd, workingDirectory: projectRoot);
+            AppendTerminal($"[RvcRealtimeGui] サーバー起動: {cmd}\n");
+            SetServerRunning(true);
+        }
+        catch (Exception ex)
+        {
+            AppendTerminal($"[RvcRealtimeGui] 起動失敗: {ex.Message}\n");
+            _pty?.Dispose();
+            _pty = null;
+        }
+    }
+
+    void StopServerProcess()
+    {
+        _pty?.Stop();
+        _pty = null;
+        AppendTerminal("[RvcRealtimeGui] サーバーを停止しました。\n");
+        SetServerRunning(false);
+    }
+
     // ── イベントハンドラ ────────────────────────────────────────
+
+    void ToggleServerBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (_pty?.IsRunning == true)
+            StopServerProcess();
+        else
+            StartServerProcess();
+    }
+
+    void ClearTerminalBtn_Click(object sender, RoutedEventArgs e)
+    {
+        _termBuf.Clear();
+        TerminalText.Text = "";
+    }
 
     async void BrowsePthBtn_Click(object sender, RoutedEventArgs e) =>
         await PickFileAsync(PthPathBox, ".pth").ConfigureAwait(true);
@@ -182,26 +296,77 @@ public sealed partial class MainWindow : Window
         catch (Exception ex) { await ShowErrorAsync(ex.Message); }
     }
 
-    async void StartBtn_Click(object sender, RoutedEventArgs e)
+    async void ToggleVcBtn_Click(object sender, RoutedEventArgs e)
     {
-        try
+        if (_vcRunning)
         {
-            RvcConfig cfg = CollectConfig();
-            StartResponse res = await _api.StartAsync(cfg).ConfigureAwait(true);
-            SrLabel.Text = res.Samplerate.ToString();
-            DelayLabel.Text = $"{res.DelayMs} ms";
+            try
+            {
+                await _api.StopAsync().ConfigureAwait(true);
+                SetVcRunning(false);
+            }
+            catch (Exception ex)
+            {
+                await ShowErrorAsync(ex.Message);
+            }
         }
-        catch (Exception ex)
+        else
         {
-            await ShowErrorAsync(ex.Message);
+            string pthPath = PthPathBox.Text.Trim();
+            if (string.IsNullOrEmpty(pthPath))
+            {
+                await ShowErrorAsync("モデルファイル (.pth) が指定されていません。");
+                return;
+            }
+            if (!System.IO.File.Exists(pthPath))
+            {
+                await ShowErrorAsync($"モデルファイルが見つかりません:\n{pthPath}");
+                return;
+            }
+
+            try
+            {
+                RvcConfig cfg = CollectConfig();
+                StartResponse res = await _api.StartAsync(cfg).ConfigureAwait(true);
+                SrLabel.Text = res.Samplerate.ToString();
+                DelayLabel.Text = $"{res.DelayMs} ms";
+                SetVcRunning(true);
+            }
+            catch (Exception ex)
+            {
+                await ShowErrorAsync(ex.Message);
+            }
         }
     }
 
-    async void StopBtn_Click(object sender, RoutedEventArgs e)
-    {
-        try { await _api.StopAsync().ConfigureAwait(true); }
-        catch (Exception ex) { await ShowErrorAsync(ex.Message); }
-    }
+    // ── スライダー値表示 ────────────────────────────────────────
+
+    void ThresholdSlider_ValueChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e) =>
+        ThresholdVal.Text = ((int)e.NewValue).ToString();
+
+    void PitchSlider_ValueChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e) =>
+        PitchVal.Text = ((int)e.NewValue).ToString();
+
+    void FormantSlider_ValueChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e) =>
+        FormantVal.Text = e.NewValue.ToString("F2");
+
+    void IndexRateSlider_ValueChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e) =>
+        IndexRateVal.Text = e.NewValue.ToString("F2");
+
+    void RmsMixSlider_ValueChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e) =>
+        RmsMixVal.Text = e.NewValue.ToString("F2");
+
+    void BlockTimeSlider_ValueChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e) =>
+        BlockTimeVal.Text = e.NewValue.ToString("F2");
+
+    void NCpuSlider_ValueChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e) =>
+        NCpuVal.Text = ((int)e.NewValue).ToString();
+
+    void CrossfadeSlider_ValueChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e) =>
+        CrossfadeVal.Text = e.NewValue.ToString("F2");
+
+    void ExtraTimeSlider_ValueChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e) =>
+        ExtraTimeVal.Text = e.NewValue.ToString("F2");
 
     // ── バックグラウンド ────────────────────────────────────────
 
@@ -223,7 +388,7 @@ public sealed partial class MainWindow : Window
                 catch when (ct.IsCancellationRequested) { return; }
                 catch
                 {
-                    await Task.Delay(2000, ct).ConfigureAwait(false);  // 切断時は再試行
+                    await Task.Delay(2000, ct).ConfigureAwait(false);
                 }
             }
         }, ct);

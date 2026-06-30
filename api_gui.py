@@ -186,22 +186,20 @@ class AudioServer:
             with open(CONFIG_PATH, "r", encoding="utf-8") as f:
                 return json.load(f)
         except Exception:
-            return ConfigPayload().model_dump()
+            return ConfigPayload().dict()
 
     def save_config(self, payload: ConfigPayload):
         os.makedirs(os.path.dirname(CONFIG_PATH), exist_ok=True)
         with open(CONFIG_PATH, "w", encoding="utf-8") as f:
-            json.dump(payload.model_dump(), f, ensure_ascii=False, indent=2)
+            json.dump(payload.dict(), f, ensure_ascii=False, indent=2)
 
     def validate(self, payload: ConfigPayload):
         if not payload.pth_path.strip():
             raise HTTPException(400, "PTH ファイルを指定してください")
-        if not payload.index_path.strip():
-            raise HTTPException(400, "INDEX ファイルを指定してください")
         non_ascii = re.compile(r"[^\x00-\x7F]+")
         if non_ascii.findall(payload.pth_path):
             raise HTTPException(400, "PTH ファイルのパスに非 ASCII 文字を含めないでください")
-        if non_ascii.findall(payload.index_path):
+        if payload.index_path.strip() and non_ascii.findall(payload.index_path):
             raise HTTPException(400, "INDEX ファイルのパスに非 ASCII 文字を含めないでください")
 
     # ── 音声変換 ────────────────────────────────────────────
