@@ -44,6 +44,8 @@
                         Click="ToggleVcBtn_Click">
                     <StackPanel Orientation="Horizontal" Spacing="6">
                         <FontIcon x:Name="ToggleVcIcon" Glyph="&#xE768;" FontSize="14" VerticalAlignment="Center" />
+                        <TextBlock x:Name="VcSpinner" Text="⠋" FontSize="14"
+                                   VerticalAlignment="Center" Visibility="Collapsed" />
                         <TextBlock x:Name="ToggleVcText" Text="音声変換 開始" VerticalAlignment="Center"
                                    Style="{ThemeResource CaptionTextBlockStyle}" />
                     </StackPanel>

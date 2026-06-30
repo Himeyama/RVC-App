@@ -27,12 +27,12 @@ from typing import Optional
 import numpy as np
 import sounddevice as sd
 import uvicorn
+from uvicorn.config import LOGGING_CONFIG
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("api_gui")
 
 CONFIG_PATH = "configs/inuse/config.json"
@@ -520,6 +520,8 @@ async def metrics_ws(ws: WebSocket):
 if __name__ == "__main__":
     if sys.platform == "win32":
         freeze_support()
+    # stderr を stdout にマージ（ConPTY 経由でもアクセスログが届くようにする）
+    sys.stderr = sys.stdout
     load_dotenv()
     os.environ["OMP_NUM_THREADS"] = "4"
     if sys.platform == "darwin":
@@ -534,4 +536,16 @@ if __name__ == "__main__":
 
     server.config = Config()
     server.init_workers()
-    uvicorn.run(app, host="127.0.0.1", port=6242)
+    # LOGGING_CONFIG を明示することで、basicConfig で上書きされた root logger に
+    # 影響されず uvicorn のアクセスログが確実に出力される
+    log_cfg = LOGGING_CONFIG.copy()
+    log_cfg["formatters"]["access"]["use_colors"] = True
+    uvicorn.run(
+        app,
+        host="127.0.0.1",
+        port=6242,
+        log_level="info",
+        access_log=True,
+        use_colors=True,
+        log_config=log_cfg,
+    )

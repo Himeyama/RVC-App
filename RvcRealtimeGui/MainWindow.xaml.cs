@@ -24,6 +24,11 @@ public sealed partial class MainWindow : Window
     PseudoConsole? _pty;
     bool _terminalReady;
 
+    static readonly string[] _spinnerFrames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+    int _spinnerIndex;
+    readonly Microsoft.UI.Xaml.DispatcherTimer _spinnerTimer = new()
+        { Interval = TimeSpan.FromMilliseconds(80) };
+
     public MainWindow()
     {
         InitializeComponent();
@@ -34,12 +39,14 @@ public sealed partial class MainWindow : Window
         _dispatcher = DispatcherQueue.GetForCurrentThread();
 
         Activated += async (_, _) => await InitializeAsync();
-        Closed += (_, _) =>
+
+        // Closed は async を await できないため AppWindow.Closing で代替する
+        AppWindow.Closing += OnWindowClosing;
+
+        _spinnerTimer.Tick += (_, _) =>
         {
-            _metricsCts?.Cancel();
-            _statusCts?.Cancel();
-            _ = StopServerProcessAsync();
-            _api.Dispose();
+            _spinnerIndex = (_spinnerIndex + 1) % _spinnerFrames.Length;
+            VcSpinner.Text = _spinnerFrames[_spinnerIndex];
         };
 
         _ = InitTerminalAsync();
@@ -276,6 +283,7 @@ public sealed partial class MainWindow : Window
             _pty.Start(cmd, workingDirectory: projectRoot, extraEnv: env);
             AppendTerminal($"\x1b[90m[RvcRealtimeGui] サーバー起動: {cmd}\x1b[0m\r\n");
             SetServerRunning(true);
+            SetVcSpinner(true);
         }
         catch (Exception ex)
         {
@@ -296,24 +304,69 @@ public sealed partial class MainWindow : Window
         return null;
     }
 
+    async void OnWindowClosing(Microsoft.UI.Windowing.AppWindow sender,
+                               Microsoft.UI.Windowing.AppWindowClosingEventArgs args)
+    {
+        // 一旦閉じるをキャンセルしてクリーンアップを待つ
+        args.Cancel = true;
+        _metricsCts?.Cancel();
+        _statusCts?.Cancel();
+        await StopServerProcessAsync();
+        _api.Dispose();
+        // クリーンアップ完了後にウィンドウを破棄
+        AppWindow.Closing -= OnWindowClosing;
+        AppWindow.Destroy();
+    }
+
     async Task StopServerProcessAsync()
     {
         if (_vcRunning)
         {
-            try { await _api.StopAsync().ConfigureAwait(true); } catch { }
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+            try { await _api.StopAsync(cts.Token).ConfigureAwait(true); } catch { }
             SetVcRunning(false);
         }
+
+        // PTY ホスト (uv.exe) を停止
         _pty?.Stop();
         _pty = null;
+
+        // ポート 6242 を LISTEN している全プロセス (api_gui.py の python.exe を含む) を
+        // プロセスツリーごと強制終了。uv.exe の子プロセスはオーファンになるため必須。
+        List<int> killed = await Task.Run(() => PortKiller.KillListeners(6242)).ConfigureAwait(true);
+        if (killed.Count > 0)
+            AppendTerminal($"\x1b[90m[RvcRealtimeGui] ポート 6242 の使用プロセスを強制終了: PID={string.Join(",", killed)}\x1b[0m\r\n");
+
+        SetVcSpinner(false);
         AppendTerminal("\x1b[90m[RvcRealtimeGui] サーバーを停止しました。\x1b[0m\r\n");
         SetServerRunning(false);
+    }
+
+    void SetVcSpinner(bool active)
+    {
+        if (active)
+        {
+            _spinnerTimer.Start();
+            VcSpinner.Visibility    = Visibility.Visible;
+            ToggleVcIcon.Visibility = Visibility.Collapsed;
+        }
+        else
+        {
+            _spinnerTimer.Stop();
+            VcSpinner.Visibility    = Visibility.Collapsed;
+            ToggleVcIcon.Visibility = Visibility.Visible;
+        }
     }
 
     // ── イベントハンドラ ────────────────────────────────────────
 
     async void ToggleServerBtn_Click(object sender, RoutedEventArgs e)
     {
-        if (_pty?.IsRunning == true)
+        // PTY 配下で起動中、もしくはポート 6242 が使われていれば停止フロー。
+        // 外部起動 / PTY 死亡後のオーファン python.exe も確実に拾えるようにする。
+        bool serverAlive = _pty?.IsRunning == true
+                        || PortKiller.GetListeningPids(6242).Count > 0;
+        if (serverAlive)
             await StopServerProcessAsync();
         else
             StartServerProcess();
@@ -472,13 +525,15 @@ public sealed partial class MainWindow : Window
                 {
                     ServerLabel.Text = "接続済み";
                     ServerLabel.Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["SystemFillColorSuccessBrush"];
+                    SetVcSpinner(false);
                 }
                 else
                 {
                     ServerLabel.Text = "未接続";
                     ServerLabel.Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["SystemFillColorCriticalBrush"];
-                    // 切断時は変換中なら停止扱いにする
                     if (_vcRunning) SetVcRunning(false);
+                    // PTY が実行中（サーバー起動待ち）ならスピナーを表示
+                    SetVcSpinner(_pty?.IsRunning == true);
                 }
                 ToggleVcBtn.IsEnabled = alive;
             });
