@@ -7,6 +7,20 @@ from multiprocessing import cpu_count
 
 import torch
 
+# PyTorch 2.6+ では torch.load の weights_only デフォルトが True になり、
+# fairseq の HuBERT チェックポイント (fairseq.data.dictionary.Dictionary を含む) が
+# 読めなくなる。本リポジトリで読む checkpoint は公式 HuggingFace 由来で信頼できるため、
+# torch.load のデフォルトを weights_only=False に戻すパッチを当てる。
+_orig_torch_load = torch.load
+
+
+def _patched_torch_load(*args, **kwargs):
+    kwargs.setdefault("weights_only", False)
+    return _orig_torch_load(*args, **kwargs)
+
+
+torch.load = _patched_torch_load
+
 try:
     import intel_extension_for_pytorch as ipex  # pylint: disable=import-error, unused-import
 
