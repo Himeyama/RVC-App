@@ -2,7 +2,6 @@
 __pycache__
 /TEMP
 *.pyd
-.venv
 /opt
 tools/aria2c/
 tools/flag.txt
@@ -26,5 +25,8 @@ rmvpe.pt
 /assets/weights/*
 ffmpeg.*
 ffprobe.*
-venv/*
+venv/
+.venv/
 _fairseq_build/
+# uv
+.uv-cache/
