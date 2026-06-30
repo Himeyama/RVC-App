@@ -121,7 +121,8 @@ public sealed class PseudoConsole : IDisposable
     }
 
     public void Start(string command, string? workingDirectory = null,
-        short cols = 220, short rows = 50)
+        short cols = 220, short rows = 50,
+        Dictionary<string, string>? extraEnv = null)
     {
         if (IsRunning) return;
 
@@ -141,6 +142,10 @@ public sealed class PseudoConsole : IDisposable
 
         _hPipeIn  = hPTYInWrite;
         _hPipeOut = hPTYOutRead;
+
+        // ── 環境変数ブロック構築 ────────────────────────────────
+        // 現在のプロセス環境に extraEnv を上書きして Unicode 環境ブロックを作る
+        IntPtr envBlock = BuildEnvBlock(extraEnv);
 
         // ── プロセス属性リスト ──────────────────────────────────
         IntPtr attrListSize = IntPtr.Zero;
@@ -163,19 +168,22 @@ public sealed class PseudoConsole : IDisposable
                     $"UpdateProcThreadAttribute failed: {Marshal.GetLastWin32Error()}");
 
             var si = new STARTUPINFOEX();
-            si.StartupInfo.cb         = Marshal.SizeOf<STARTUPINFOEX>();
-            // コンソールウィンドウを非表示にする
-            si.StartupInfo.dwFlags    = STARTF_USESHOWWINDOW;
+            si.StartupInfo.cb          = Marshal.SizeOf<STARTUPINFOEX>();
+            si.StartupInfo.dwFlags     = STARTF_USESHOWWINDOW;
             si.StartupInfo.wShowWindow = SW_HIDE;
-            si.lpAttributeList        = attrList;
+            si.lpAttributeList         = attrList;
 
-            string fullCmd = $"cmd.exe /c {command}";
+            // cmd.exe /c を外し直接起動（PTY が子プロセスに正しく継承される）
+            string fullCmd = command;
+
+            // CREATE_UNICODE_ENVIRONMENT (0x400) を追加して Unicode 環境ブロックを使う
+            const uint CREATE_UNICODE_ENVIRONMENT = 0x00000400;
 
             if (!CreateProcess(
                     null, fullCmd,
                     IntPtr.Zero, IntPtr.Zero, false,
-                    EXTENDED_STARTUPINFO_PRESENT,
-                    IntPtr.Zero, workingDirectory,
+                    EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT,
+                    envBlock, workingDirectory,
                     ref si, out _pi))
                 throw new InvalidOperationException(
                     $"CreateProcess failed: {Marshal.GetLastWin32Error()}");
@@ -183,15 +191,41 @@ public sealed class PseudoConsole : IDisposable
         catch
         {
             Marshal.FreeHGlobal(attrList);
+            if (envBlock != IntPtr.Zero) Marshal.FreeHGlobal(envBlock);
             throw;
         }
         Marshal.FreeHGlobal(attrList);
+        if (envBlock != IntPtr.Zero) Marshal.FreeHGlobal(envBlock);
 
         IsRunning = true;
 
         _cts = new CancellationTokenSource();
         var ct = _cts.Token;
         _ = Task.Run(() => ReadLoop(ct), ct);
+    }
+
+    /// <summary>現在プロセスの環境変数に extraEnv を上書きした Unicode 環境ブロックを確保する。</summary>
+    static IntPtr BuildEnvBlock(Dictionary<string, string>? extraEnv)
+    {
+        // 現在の環境変数を取得
+        var env = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (System.Collections.DictionaryEntry e in System.Environment.GetEnvironmentVariables())
+            env[(string)e.Key] = (string)(e.Value ?? "");
+
+        if (extraEnv is not null)
+            foreach (var kv in extraEnv)
+                env[kv.Key] = kv.Value;
+
+        // "KEY=VALUE\0KEY=VALUE\0\0" 形式の Unicode ブロック
+        var sb = new System.Text.StringBuilder();
+        foreach (var kv in env)
+            sb.Append(kv.Key).Append('=').Append(kv.Value).Append('\0');
+        sb.Append('\0');
+
+        string block = sb.ToString();
+        IntPtr ptr = Marshal.AllocHGlobal(block.Length * 2);
+        Marshal.Copy(block.ToCharArray(), 0, ptr, block.Length);
+        return ptr;
     }
 
     /// <summary>ConPTY のサイズを変更する（WebView2 リサイズ時に呼ぶ）</summary>

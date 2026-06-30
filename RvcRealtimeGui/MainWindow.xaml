@@ -38,6 +38,7 @@
                 <!-- 音声変換 開始/停止トグル -->
                 <Button x:Name="ToggleVcBtn"
                         Height="32" Padding="12,0"
+                        IsEnabled="False"
                         Style="{ThemeResource AccentButtonStyle}"
                         ToolTipService.ToolTip="音声変換 開始"
                         Click="ToggleVcBtn_Click">

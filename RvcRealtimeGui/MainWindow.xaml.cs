@@ -38,7 +38,7 @@ public sealed partial class MainWindow : Window
         {
             _metricsCts?.Cancel();
             _statusCts?.Cancel();
-            _pty?.Stop();
+            _ = StopServerProcessAsync();
             _api.Dispose();
         };
 
@@ -260,36 +260,61 @@ public sealed partial class MainWindow : Window
         string projectRoot = System.IO.Path.GetFullPath(
             System.IO.Path.Combine(AppContext.BaseDirectory, @"..\..\..\..\.."));
         string apiScript = System.IO.Path.Combine(projectRoot, "api_gui.py");
-        string cmd = $"uv run python \"{apiScript}\"";
+
+        // uv.exe のフルパスを取得（PATH に依存しない）
+        string uvExe = FindInPath("uv.exe") ?? "uv.exe";
+        string cmd = $"\"{uvExe}\" run python \"{apiScript}\"";
+
+        var env = new Dictionary<string, string>
+        {
+            ["PYTHONUNBUFFERED"] = "1",
+            ["FORCE_COLOR"] = "1",
+        };
 
         try
         {
-            _pty.Start(cmd, workingDirectory: projectRoot);
-            AppendTerminal($"[RvcRealtimeGui] サーバー起動: {cmd}\n");
+            _pty.Start(cmd, workingDirectory: projectRoot, extraEnv: env);
+            AppendTerminal($"\x1b[90m[RvcRealtimeGui] サーバー起動: {cmd}\x1b[0m\r\n");
             SetServerRunning(true);
         }
         catch (Exception ex)
         {
-            AppendTerminal($"[RvcRealtimeGui] 起動失敗: {ex.Message}\n");
+            AppendTerminal($"\x1b[31m[RvcRealtimeGui] 起動失敗: {ex.Message}\x1b[0m\r\n");
             _pty?.Dispose();
             _pty = null;
         }
     }
 
-    void StopServerProcess()
+    static string? FindInPath(string exe)
     {
+        string pathVar = System.Environment.GetEnvironmentVariable("PATH") ?? "";
+        foreach (string dir in pathVar.Split(';'))
+        {
+            string full = System.IO.Path.Combine(dir.Trim(), exe);
+            if (System.IO.File.Exists(full)) return full;
+        }
+        return null;
+    }
+
+    async Task StopServerProcessAsync()
+    {
+        if (_vcRunning)
+        {
+            try { await _api.StopAsync().ConfigureAwait(true); } catch { }
+            SetVcRunning(false);
+        }
         _pty?.Stop();
         _pty = null;
-        AppendTerminal("[RvcRealtimeGui] サーバーを停止しました。\n");
+        AppendTerminal("\x1b[90m[RvcRealtimeGui] サーバーを停止しました。\x1b[0m\r\n");
         SetServerRunning(false);
     }
 
     // ── イベントハンドラ ────────────────────────────────────────
 
-    void ToggleServerBtn_Click(object sender, RoutedEventArgs e)
+    async void ToggleServerBtn_Click(object sender, RoutedEventArgs e)
     {
         if (_pty?.IsRunning == true)
-            StopServerProcess();
+            await StopServerProcessAsync();
         else
             StartServerProcess();
     }
@@ -353,6 +378,16 @@ public sealed partial class MainWindow : Window
             if (!System.IO.File.Exists(pthPath))
             {
                 await ShowErrorAsync($"モデルファイルが見つかりません:\n{pthPath}");
+                return;
+            }
+            if (InputDeviceCombo.SelectedItem is null)
+            {
+                await ShowErrorAsync("入力デバイスが選択されていません。");
+                return;
+            }
+            if (OutputDeviceCombo.SelectedItem is null)
+            {
+                await ShowErrorAsync("出力デバイスが選択されていません。");
                 return;
             }
 
@@ -442,7 +477,10 @@ public sealed partial class MainWindow : Window
                 {
                     ServerLabel.Text = "未接続";
                     ServerLabel.Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["SystemFillColorCriticalBrush"];
+                    // 切断時は変換中なら停止扱いにする
+                    if (_vcRunning) SetVcRunning(false);
                 }
+                ToggleVcBtn.IsEnabled = alive;
             });
             try { await Task.Delay(3000, ct).ConfigureAwait(false); } catch { return; }
         }
