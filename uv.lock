@@ -637,6 +637,19 @@ wheels = [
 ]
 
 [[package]]
+name = "customtkinter"
+version = "6.0.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "darkdetect" },
+    { name = "packaging" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/c4/36/aee6ed9171a5a232da66a8b257752bd03d25b487c9d67ba367ad159bd976/customtkinter-6.0.0.tar.gz", hash = "sha256:c782df167bc64ab3fc3140286df06967ac2de4dcc97dd5958426fe9c1a98057b", size = 267195, upload-time = "2026-06-24T20:14:32.144Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b0/63/e2d3387432c5a94dec64031c86b5ba737216de7e7490abb55efd64dec054/customtkinter-6.0.0-py3-none-any.whl", hash = "sha256:704fcbf1d2fca06bd7881b0afacfae72aed9864c9b6de2870e632e55eb3a0456", size = 302166, upload-time = "2026-06-24T20:14:30.191Z" },
+]
+
+[[package]]
 name = "cycler"
 version = "0.12.1"
 source = { registry = "https://pypi.org/simple" }
@@ -669,6 +682,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/51/6c/4d6c4e538b5f9582415697b1e9088402012674b915e0132a230b56fe3a9c/cython-3.2.8-cp39-cp39-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:c85c2ceb6bc6d3bc442241038c4e8bdd9883a3afd655a9b47e1222e10fe9edf1", size = 3464906, upload-time = "2026-06-30T07:43:17.527Z" },
     { url = "https://files.pythonhosted.org/packages/ac/74/a6868dc11f8fd49caa7a8ae686edd6e6590d163510d36265fccf40f625e1/cython-3.2.8-cp39-cp39-win_amd64.whl", hash = "sha256:7cae933e6b82c198b42e934472a41d2a14c5e115da6ea794c33039c2694ce4e5", size = 2789674, upload-time = "2026-06-30T07:43:19.446Z" },
     { url = "https://files.pythonhosted.org/packages/c4/19/31aa63ab719b2e1eea5f200a8a54e2591dc1966a6b75e3de30ef8be9bc2c/cython-3.2.8-py3-none-any.whl", hash = "sha256:f635e113677666de13a2ec2979e9b1d5b90617cdfd1a691d3559be81e2dd6cb9", size = 1258688, upload-time = "2026-06-30T07:41:55.624Z" },
+]
+
+[[package]]
+name = "darkdetect"
+version = "0.8.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/45/77/7575be73bf12dee231d0c6e60ce7fb7a7be4fcd58823374fc59a6e48262e/darkdetect-0.8.0.tar.gz", hash = "sha256:b5428e1170263eb5dea44c25dc3895edd75e6f52300986353cd63533fe7df8b1", size = 7681, upload-time = "2022-12-16T14:14:42.113Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f2/f2/728f041460f1b9739b85ee23b45fa5a505962ea11fd85bdbe2a02b021373/darkdetect-0.8.0-py3-none-any.whl", hash = "sha256:a7509ccf517eaad92b31c214f593dbcf138ea8a43b2935406bbd565e15527a85", size = 8955, upload-time = "2022-12-16T14:14:40.92Z" },
 ]
 
 [[package]]
@@ -3299,6 +3321,7 @@ dependencies = [
     { name = "av", version = "15.1.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
     { name = "av", version = "17.1.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
     { name = "colorama" },
+    { name = "customtkinter" },
     { name = "cython" },
     { name = "einops" },
     { name = "fairseq" },
@@ -3408,6 +3431,7 @@ requires-dist = [
     { name = "audioread", specifier = ">=3.0.1" },
     { name = "av", specifier = ">=12.3.0" },
     { name = "colorama", specifier = ">=0.4.5" },
+    { name = "customtkinter", specifier = ">=6.0.0" },
     { name = "cython", specifier = ">=3.0.11" },
     { name = "einops", specifier = ">=0.8.2" },
     { name = "einops", marker = "extra == 'realtime'" },
