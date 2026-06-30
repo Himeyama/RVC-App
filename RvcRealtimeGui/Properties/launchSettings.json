@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "RvcRealtimeGui (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "RvcRealtimeGui (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}

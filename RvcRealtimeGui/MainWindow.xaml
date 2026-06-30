@@ -1,0 +1,180 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Window
+    x:Class="RvcRealtimeGui.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="RVC リアルタイム音声変換">
+    <Window.SystemBackdrop>
+        <MicaBackdrop />
+    </Window.SystemBackdrop>
+
+    <Grid RowDefinitions="Auto,*">
+        <!-- カスタムタイトルバー -->
+        <Grid x:Name="TitleBarGrid" Grid.Row="0" Height="48" Background="Transparent">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center"
+                        Margin="16,0,0,0" Spacing="8">
+                <FontIcon Glyph="&#xE767;" FontSize="16" VerticalAlignment="Center" />
+                <TextBlock Text="RVC リアルタイム音声変換"
+                           Style="{ThemeResource CaptionTextBlockStyle}"
+                           VerticalAlignment="Center" />
+            </StackPanel>
+        </Grid>
+
+        <ScrollViewer Grid.Row="1" Padding="20,8,20,20" VerticalScrollBarVisibility="Auto">
+            <StackPanel Spacing="14">
+
+                <!-- ── モデル ────────────────────────────────────── -->
+                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1" CornerRadius="8" Padding="16">
+                    <StackPanel Spacing="10">
+                        <TextBlock Text="モデル読み込み"
+                                   Style="{ThemeResource BodyStrongTextBlockStyle}" />
+
+                        <Grid ColumnDefinitions="150,*,Auto" ColumnSpacing="8">
+                            <TextBlock Grid.Column="0" Text="モデル (.pth)" VerticalAlignment="Center" />
+                            <TextBox Grid.Column="1" x:Name="PthPathBox" />
+                            <Button Grid.Column="2" x:Name="BrowsePthBtn" Content="参照..." Width="90"
+                                    Click="BrowsePthBtn_Click" />
+                        </Grid>
+
+                        <Grid ColumnDefinitions="150,*,Auto" ColumnSpacing="8">
+                            <TextBlock Grid.Column="0" Text="インデックス (.index)" VerticalAlignment="Center" />
+                            <TextBox Grid.Column="1" x:Name="IndexPathBox" />
+                            <Button Grid.Column="2" x:Name="BrowseIndexBtn" Content="参照..." Width="90"
+                                    Click="BrowseIndexBtn_Click" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- ── デバイス ───────────────────────────────────── -->
+                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1" CornerRadius="8" Padding="16">
+                    <StackPanel Spacing="10">
+                        <TextBlock Text="オーディオデバイス"
+                                   Style="{ThemeResource BodyStrongTextBlockStyle}" />
+
+                        <Grid ColumnDefinitions="150,*,Auto" ColumnSpacing="8">
+                            <TextBlock Grid.Column="0" Text="デバイス種別" VerticalAlignment="Center" />
+                            <ComboBox Grid.Column="1" x:Name="HostApiCombo" HorizontalAlignment="Stretch"
+                                      SelectionChanged="HostApiCombo_SelectionChanged" />
+                            <CheckBox Grid.Column="2" x:Name="WasapiExclusiveCheck" Content="WASAPI 排他" />
+                        </Grid>
+
+                        <Grid ColumnDefinitions="150,*" ColumnSpacing="8">
+                            <TextBlock Grid.Column="0" Text="入力デバイス" VerticalAlignment="Center" />
+                            <ComboBox Grid.Column="1" x:Name="InputDeviceCombo" HorizontalAlignment="Stretch" />
+                        </Grid>
+
+                        <Grid ColumnDefinitions="150,*" ColumnSpacing="8">
+                            <TextBlock Grid.Column="0" Text="出力デバイス" VerticalAlignment="Center" />
+                            <ComboBox Grid.Column="1" x:Name="OutputDeviceCombo" HorizontalAlignment="Stretch" />
+                        </Grid>
+
+                        <StackPanel Orientation="Horizontal" Spacing="12">
+                            <Button x:Name="ReloadDevicesBtn" Content="デバイス一覧を更新"
+                                    Click="ReloadDevicesBtn_Click" />
+                            <RadioButton x:Name="SrModelRadio" GroupName="SrType"
+                                         Content="モデルの SR" IsChecked="True" />
+                            <RadioButton x:Name="SrDeviceRadio" GroupName="SrType"
+                                         Content="デバイスの SR" />
+                            <TextBlock Text="サンプリングレート:" VerticalAlignment="Center" />
+                            <TextBlock x:Name="SrLabel" Text="-" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- ── 基本 & パフォーマンス（横並び）─────────────── -->
+                <Grid ColumnDefinitions="*,*" ColumnSpacing="14">
+
+                    <!-- 基本設定 -->
+                    <Border Grid.Column="0"
+                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            BorderThickness="1" CornerRadius="8" Padding="16">
+                        <StackPanel Spacing="6">
+                            <TextBlock Text="基本設定" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+
+                            <TextBlock Text="無音閾値 (dB)" />
+                            <Slider x:Name="ThresholdSlider" Minimum="-60" Maximum="0" StepFrequency="1" Value="-60" />
+
+                            <TextBlock Text="ピッチ (半音)" />
+                            <Slider x:Name="PitchSlider" Minimum="-16" Maximum="16" StepFrequency="1" Value="0" />
+
+                            <TextBlock Text="フォルマント" />
+                            <Slider x:Name="FormantSlider" Minimum="-2" Maximum="2" StepFrequency="0.05" Value="0" />
+
+                            <TextBlock Text="インデックス強度" />
+                            <Slider x:Name="IndexRateSlider" Minimum="0" Maximum="1" StepFrequency="0.01" Value="0" />
+
+                            <TextBlock Text="音量ミックス率" />
+                            <Slider x:Name="RmsMixSlider" Minimum="0" Maximum="1" StepFrequency="0.01" Value="0" />
+
+                            <TextBlock Text="F0 推定アルゴリズム" Margin="0,4,0,0" />
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <RadioButton x:Name="F0PmRadio"      GroupName="F0" Content="pm" />
+                                <RadioButton x:Name="F0HarvestRadio" GroupName="F0" Content="harvest" />
+                                <RadioButton x:Name="F0CrepeRadio"   GroupName="F0" Content="crepe" />
+                                <RadioButton x:Name="F0RmvpeRadio"   GroupName="F0" Content="rmvpe" />
+                                <RadioButton x:Name="F0FcpeRadio"    GroupName="F0" Content="fcpe" IsChecked="True" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- パフォーマンス設定 -->
+                    <Border Grid.Column="1"
+                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            BorderThickness="1" CornerRadius="8" Padding="16">
+                        <StackPanel Spacing="6">
+                            <TextBlock Text="パフォーマンス設定" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+
+                            <TextBlock Text="バッファ長 (秒)" />
+                            <Slider x:Name="BlockTimeSlider" Minimum="0.02" Maximum="1.5" StepFrequency="0.01" Value="0.25" />
+
+                            <TextBlock Text="Harvest CPU スレッド数" />
+                            <Slider x:Name="NCpuSlider" Minimum="1" Maximum="8" StepFrequency="1" Value="4" />
+
+                            <TextBlock Text="クロスフェード長 (秒)" />
+                            <Slider x:Name="CrossfadeSlider" Minimum="0.01" Maximum="0.15" StepFrequency="0.01" Value="0.05" />
+
+                            <TextBlock Text="追加推論時間 (秒)" />
+                            <Slider x:Name="ExtraTimeSlider" Minimum="0.05" Maximum="5.0" StepFrequency="0.01" Value="2.5" />
+
+                            <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,8,0,0">
+                                <CheckBox x:Name="INoiseCheck" Content="入力ノイズ除去" />
+                                <CheckBox x:Name="ONoiseCheck" Content="出力ノイズ除去" />
+                                <CheckBox x:Name="UsePvCheck" Content="フェーズボコーダー" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+
+                <!-- ── ステータスバー ─────────────────────────────── -->
+                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1" CornerRadius="8" Padding="14">
+                    <StackPanel Orientation="Horizontal" Spacing="12">
+                        <Button x:Name="StartBtn" Content="音声変換 開始" MinWidth="140"
+                                Background="#2e7d32" Foreground="White"
+                                Click="StartBtn_Click" />
+                        <Button x:Name="StopBtn" Content="音声変換 停止" MinWidth="140"
+                                Background="#c62828" Foreground="White"
+                                Click="StopBtn_Click" />
+                        <TextBlock Text="アルゴリズム遅延:" VerticalAlignment="Center" Margin="16,0,0,0" />
+                        <TextBlock x:Name="DelayLabel" Text="0 ms" VerticalAlignment="Center"
+                                   FontFamily="Consolas" MinWidth="60" />
+                        <TextBlock Text="推論時間:" VerticalAlignment="Center" Margin="16,0,0,0" />
+                        <TextBlock x:Name="InferLabel" Text="0 ms" VerticalAlignment="Center"
+                                   FontFamily="Consolas" MinWidth="60" />
+                        <TextBlock Text="サーバ:" VerticalAlignment="Center" Margin="16,0,0,0" />
+                        <TextBlock x:Name="ServerLabel" Text="未接続" VerticalAlignment="Center"
+                                   Foreground="{ThemeResource SystemFillColorCautionBrush}" />
+                    </StackPanel>
+                </Border>
+
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</Window>
