@@ -21,7 +21,7 @@ public sealed partial class MainWindow : Window
     bool _suppressHostApiChanged;
     bool _vcRunning;
 
-    PseudoConsole? _pty;
+    ProcessRunner? _runner;
     bool _terminalReady;
 
     static readonly string[] _spinnerFrames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
@@ -214,13 +214,7 @@ public sealed partial class MainWindow : Window
         {
             using JsonDocument doc = JsonDocument.Parse(e.WebMessageAsJson);
             string? type = doc.RootElement.GetProperty("type").GetString();
-            if (type == "resize" && _pty is not null)
-            {
-                short cols = doc.RootElement.GetProperty("cols").GetInt16();
-                short rows = doc.RootElement.GetProperty("rows").GetInt16();
-                _pty.Resize(cols, rows);
-            }
-            else if (type == "ready")
+            if (type == "ready")
             {
                 _terminalReady = true;
             }
@@ -261,35 +255,35 @@ public sealed partial class MainWindow : Window
 
     void StartServerProcess()
     {
-        _pty?.Dispose();
-        _pty = new PseudoConsole(text => _dispatcher.TryEnqueue(() => AppendTerminal(text)));
+        _runner?.Dispose();
+        _runner = new ProcessRunner(text => _dispatcher.TryEnqueue(() => AppendTerminal(text)));
 
         string projectRoot = System.IO.Path.GetFullPath(
             System.IO.Path.Combine(AppContext.BaseDirectory, @"..\..\..\..\.."));
         string apiScript = System.IO.Path.Combine(projectRoot, "api_gui.py");
 
-        // uv.exe のフルパスを取得（PATH に依存しない）
         string uvExe = FindInPath("uv.exe") ?? "uv.exe";
-        string cmd = $"\"{uvExe}\" run python \"{apiScript}\"";
+        string args = $"run python -u \"{apiScript}\"";
 
         var env = new Dictionary<string, string>
         {
             ["PYTHONUNBUFFERED"] = "1",
+            ["PYTHONIOENCODING"] = "utf-8",
             ["FORCE_COLOR"] = "1",
         };
 
         try
         {
-            _pty.Start(cmd, workingDirectory: projectRoot, extraEnv: env);
-            AppendTerminal($"\x1b[90m[RvcRealtimeGui] サーバー起動: {cmd}\x1b[0m\r\n");
+            _runner.Start(uvExe, args, workingDirectory: projectRoot, extraEnv: env);
+            AppendTerminal($"\x1b[90m[RvcRealtimeGui] サーバー起動: {uvExe} {args} (PID={_runner.Pid})\x1b[0m\r\n");
             SetServerRunning(true);
             SetVcSpinner(true);
         }
         catch (Exception ex)
         {
             AppendTerminal($"\x1b[31m[RvcRealtimeGui] 起動失敗: {ex.Message}\x1b[0m\r\n");
-            _pty?.Dispose();
-            _pty = null;
+            _runner?.Dispose();
+            _runner = null;
         }
     }
 
@@ -327,9 +321,9 @@ public sealed partial class MainWindow : Window
             SetVcRunning(false);
         }
 
-        // PTY ホスト (uv.exe) を停止
-        _pty?.Stop();
-        _pty = null;
+        // 子プロセス (uv.exe → python.exe) をツリーごと停止
+        _runner?.Stop();
+        _runner = null;
 
         // ポート 6242 を LISTEN している全プロセス (api_gui.py の python.exe を含む) を
         // プロセスツリーごと強制終了。uv.exe の子プロセスはオーファンになるため必須。
@@ -362,9 +356,9 @@ public sealed partial class MainWindow : Window
 
     async void ToggleServerBtn_Click(object sender, RoutedEventArgs e)
     {
-        // PTY 配下で起動中、もしくはポート 6242 が使われていれば停止フロー。
-        // 外部起動 / PTY 死亡後のオーファン python.exe も確実に拾えるようにする。
-        bool serverAlive = _pty?.IsRunning == true
+        // 子プロセスが生きている、もしくはポート 6242 が使われていれば停止フロー。
+        // 外部起動 / オーファン python.exe も確実に拾えるようにする。
+        bool serverAlive = _runner?.IsRunning == true
                         || PortKiller.GetListeningPids(6242).Count > 0;
         if (serverAlive)
             await StopServerProcessAsync();
@@ -532,8 +526,8 @@ public sealed partial class MainWindow : Window
                     ServerLabel.Text = "未接続";
                     ServerLabel.Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["SystemFillColorCriticalBrush"];
                     if (_vcRunning) SetVcRunning(false);
-                    // PTY が実行中（サーバー起動待ち）ならスピナーを表示
-                    SetVcSpinner(_pty?.IsRunning == true);
+                    // 子プロセスが実行中（サーバー起動待ち）ならスピナーを表示
+                    SetVcSpinner(_runner?.IsRunning == true);
                 }
                 ToggleVcBtn.IsEnabled = alive;
             });
