@@ -1,5 +1,7 @@
 # RVC-App
 
+![](docs/image.png)
+
 VITS ベースの音声変換フレームワーク [RVC-Project/Retrieval-based-Voice-Conversion-WebUI](https://github.com/RVC-Project/Retrieval-based-Voice-Conversion-WebUI) のフォークです。Windows 環境でのリアルタイム VC に特化し、WinUI 3 ネイティブ GUI と FastAPI バックエンドを追加しています。ライセンスは上流と同じ MIT を維持しています。
 
 ## このフォークでの主な変更
