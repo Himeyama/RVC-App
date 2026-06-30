@@ -1,10 +1,14 @@
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.Web.WebView2.Core;
 using RvcRealtimeGui.Models;
 using RvcRealtimeGui.Services;
+using System.Text.Json;
 using Windows.Storage.Pickers;
 using WinRT.Interop;
+
+// WinUI3 WebView2 は Microsoft.UI.Xaml.Controls.WebView2
 
 namespace RvcRealtimeGui;
 
@@ -18,9 +22,7 @@ public sealed partial class MainWindow : Window
     bool _vcRunning;
 
     PseudoConsole? _pty;
-    // ターミナルのテキストバッファ（UI スレッドのみ触る）
-    readonly System.Text.StringBuilder _termBuf = new();
-    const int TermMaxChars = 200_000;
+    bool _terminalReady;
 
     public MainWindow()
     {
@@ -39,6 +41,8 @@ public sealed partial class MainWindow : Window
             _pty?.Stop();
             _api.Dispose();
         };
+
+        _ = InitTerminalAsync();
     }
 
     // ── 初期化 ──────────────────────────────────────────────────
@@ -183,24 +187,53 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    // ── ターミナル ───────────────────────────────────────────────
+    // ── ターミナル (WebView2 + xterm.js) ────────────────────────
 
-    void AppendTerminal(string text)
+    async Task InitTerminalAsync()
     {
-        // 改行コードを統一
-        text = text.Replace("\r\n", "\n").Replace("\r", "\n");
+        await TerminalWebView.EnsureCoreWebView2Async();
+        TerminalWebView.CoreWebView2.WebMessageReceived += OnWebMessageReceived;
 
-        if (_termBuf.Length + text.Length > TermMaxChars)
+        string htmlPath = System.IO.Path.Combine(
+            System.IO.Path.GetDirectoryName(System.Reflection.Assembly.GetEntryAssembly()!.Location)!,
+            "Assets", "terminal.html");
+        // file:// URI として渡す（WebView2 はローカルファイルを読み込める）
+        TerminalWebView.CoreWebView2.Navigate(new Uri(htmlPath).AbsoluteUri);
+    }
+
+    void OnWebMessageReceived(CoreWebView2 sender, CoreWebView2WebMessageReceivedEventArgs e)
+    {
+        try
         {
-            // 古い部分を切り捨て
-            int keep = TermMaxChars / 2;
-            _termBuf.Remove(0, _termBuf.Length - keep);
+            using JsonDocument doc = JsonDocument.Parse(e.WebMessageAsJson);
+            string? type = doc.RootElement.GetProperty("type").GetString();
+            if (type == "resize" && _pty is not null)
+            {
+                short cols = doc.RootElement.GetProperty("cols").GetInt16();
+                short rows = doc.RootElement.GetProperty("rows").GetInt16();
+                _pty.Resize(cols, rows);
+            }
+            else if (type == "ready")
+            {
+                _terminalReady = true;
+            }
         }
-        _termBuf.Append(text);
-        TerminalText.Text = _termBuf.ToString();
+        catch { }
+    }
 
-        // 末尾にスクロール
-        TerminalScroll.ChangeView(null, TerminalScroll.ScrollableHeight, null);
+    void TerminalWebView_NavigationCompleted(
+        WebView2 sender,
+        CoreWebView2NavigationCompletedEventArgs args)
+    {
+        _terminalReady = true;
+    }
+
+    void AppendTerminal(string raw)
+    {
+        if (!_terminalReady) return;
+        // JSON.stringify 相当のエスケープを C# 側で行う
+        string escaped = JsonSerializer.Serialize(raw);
+        _ = TerminalWebView.CoreWebView2?.ExecuteScriptAsync($"writeTerminal({escaped})");
     }
 
     void SetServerRunning(bool running)
@@ -222,7 +255,7 @@ public sealed partial class MainWindow : Window
     void StartServerProcess()
     {
         _pty?.Dispose();
-        _pty = new PseudoConsole(text => _dispatcher.TryEnqueue(() => AppendTerminal(text)), _dispatcher);
+        _pty = new PseudoConsole(text => _dispatcher.TryEnqueue(() => AppendTerminal(text)));
 
         string projectRoot = System.IO.Path.GetFullPath(
             System.IO.Path.Combine(AppContext.BaseDirectory, @"..\..\..\..\.."));
@@ -263,8 +296,7 @@ public sealed partial class MainWindow : Window
 
     void ClearTerminalBtn_Click(object sender, RoutedEventArgs e)
     {
-        _termBuf.Clear();
-        TerminalText.Text = "";
+        _ = TerminalWebView.CoreWebView2?.ExecuteScriptAsync("clearTerminal()");
     }
 
     async void BrowsePthBtn_Click(object sender, RoutedEventArgs e) =>

@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; background: #0c0c0c; overflow: hidden; }
+  #terminal { width: 100%; height: 100%; }
+</style>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css" />
+</head>
+<body>
+<div id="terminal"></div>
+<script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"></script>
+<script>
+const term = new Terminal({
+  fontFamily: '"Cascadia Code", "Cascadia Mono", Consolas, "Courier New", monospace',
+  fontSize: 13,
+  theme: {
+    background: '#0c0c0c',
+    foreground: '#d4d4d4',
+    cursor: '#d4d4d4',
+    black:   '#0c0c0c', red:     '#c50f1f', green:  '#13a10e', yellow:  '#c19c00',
+    blue:    '#0037da', magenta: '#881798', cyan:   '#3a96dd', white:   '#cccccc',
+    brightBlack:   '#767676', brightRed:     '#e74856', brightGreen:  '#16c60c',
+    brightYellow:  '#f9f1a5', brightBlue:    '#3b78ff', brightMagenta:'#b4009e',
+    brightCyan:    '#61d6d6', brightWhite:   '#f2f2f2',
+  },
+  allowProposedApi: true,
+  scrollback: 5000,
+  convertEol: true,
+});
+const fitAddon = new FitAddon.FitAddon();
+term.loadAddon(fitAddon);
+term.open(document.getElementById('terminal'));
+fitAddon.fit();
+
+window.addEventListener('resize', () => fitAddon.fit());
+
+// C# 側から WebView2.ExecuteScriptAsync("writeTerminal(...)") で呼び出す
+function writeTerminal(data) {
+  term.write(data);
+}
+
+function clearTerminal() {
+  term.clear();
+}
+
+// リサイズ情報を C# に通知（ConPTY のサイズ更新用）
+term.onResize(({ cols, rows }) => {
+  if (window.chrome && window.chrome.webview) {
+    window.chrome.webview.postMessage(JSON.stringify({ type: 'resize', cols, rows }));
+  }
+});
+
+// ホストに準備完了を通知
+window.addEventListener('load', () => {
+  if (window.chrome && window.chrome.webview) {
+    window.chrome.webview.postMessage(JSON.stringify({ type: 'ready' }));
+  }
+});
+</script>
+</body>
+</html>

@@ -1,11 +1,10 @@
-using Microsoft.UI.Dispatching;
 using System.Runtime.InteropServices;
 using System.Text;
 
 namespace RvcRealtimeGui.Services;
 
 /// <summary>
-/// Win32 ConPTY で子プロセスをホストし、出力をコールバックで通知する。
+/// Win32 ConPTY で子プロセスをホストし、出力（生 ANSI バイト列）をコールバックで通知する。
 /// </summary>
 public sealed class PseudoConsole : IDisposable
 {
@@ -24,6 +23,9 @@ public sealed class PseudoConsole : IDisposable
 
     [DllImport("kernel32.dll", SetLastError = true)]
     static extern void ClosePseudoConsole(IntPtr hPC);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    static extern int ResizePseudoConsole(IntPtr hPC, COORD size);
 
     [DllImport("kernel32.dll", SetLastError = true)]
     static extern bool InitializeProcThreadAttributeList(
@@ -56,28 +58,27 @@ public sealed class PseudoConsole : IDisposable
     [StructLayout(LayoutKind.Sequential)]
     struct COORD { public short X; public short Y; }
 
-    // x64: cb(4) + pad(4) + 9×IntPtr(72) + 4×int(16) + 2×short(4) + pad(4) = 104 bytes
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     struct STARTUPINFO
     {
-        public int    cb;           // 4
-        public IntPtr lpReserved;   // 8
-        public IntPtr lpDesktop;    // 8
-        public IntPtr lpTitle;      // 8
-        public int    dwX;          // 4
-        public int    dwY;          // 4
-        public int    dwXSize;      // 4
-        public int    dwYSize;      // 4
-        public int    dwXCountChars;// 4
-        public int    dwYCountChars;// 4
-        public int    dwFillAttribute; // 4
-        public int    dwFlags;      // 4
-        public short  wShowWindow;  // 2
-        public short  cbReserved2;  // 2
-        public IntPtr lpReserved2;  // 8
-        public IntPtr hStdInput;    // 8
-        public IntPtr hStdOutput;   // 8
-        public IntPtr hStdError;    // 8
+        public int    cb;
+        public IntPtr lpReserved;
+        public IntPtr lpDesktop;
+        public IntPtr lpTitle;
+        public int    dwX;
+        public int    dwY;
+        public int    dwXSize;
+        public int    dwYSize;
+        public int    dwXCountChars;
+        public int    dwYCountChars;
+        public int    dwFillAttribute;
+        public int    dwFlags;
+        public short  wShowWindow;
+        public short  cbReserved2;
+        public IntPtr lpReserved2;
+        public IntPtr hStdInput;
+        public IntPtr hStdOutput;
+        public IntPtr hStdError;
     }
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
@@ -97,7 +98,8 @@ public sealed class PseudoConsole : IDisposable
     }
 
     const uint EXTENDED_STARTUPINFO_PRESENT = 0x00080000;
-    // PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE = ProcThreadAttributeValue(22, false, true, false)
+    const int  STARTF_USESHOWWINDOW         = 0x00000001;
+    const short SW_HIDE                     = 0;
     static readonly IntPtr PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE = new IntPtr(0x00020016);
 
     // ── フィールド ───────────────────────────────────────────────
@@ -107,19 +109,19 @@ public sealed class PseudoConsole : IDisposable
     IntPtr _hPipeOut = IntPtr.Zero;
     PROCESS_INFORMATION _pi;
     CancellationTokenSource _cts = new();
+
+    // 生 ANSI バイト列を文字列（UTF-8）として通知するコールバック
     readonly Action<string> _onOutput;
-    readonly DispatcherQueue _dispatcher;
 
     public bool IsRunning { get; private set; }
 
-    public PseudoConsole(Action<string> onOutput, DispatcherQueue dispatcher)
+    public PseudoConsole(Action<string> onOutput)
     {
-        _onOutput   = onOutput;
-        _dispatcher = dispatcher;
+        _onOutput = onOutput;
     }
 
     public void Start(string command, string? workingDirectory = null,
-        short cols = 200, short rows = 50)
+        short cols = 220, short rows = 50)
     {
         if (IsRunning) return;
 
@@ -130,19 +132,15 @@ public sealed class PseudoConsole : IDisposable
             throw new InvalidOperationException($"CreatePipe(out) failed: {Marshal.GetLastWin32Error()}");
 
         // ── ConPTY 作成 ────────────────────────────────────────
-        // hPTYInRead  = PTY の stdin  (子プロセスが読む)
-        // hPTYOutWrite= PTY の stdout (子プロセスが書く)
         var size = new COORD { X = cols, Y = rows };
         int hr = CreatePseudoConsole(size, hPTYInRead, hPTYOutWrite, 0, out _hPC);
-        // ConPTY が内部でコピーするので子側のハンドルは閉じる
         CloseHandle(hPTYInRead);
         CloseHandle(hPTYOutWrite);
         if (hr != 0)
             throw new InvalidOperationException($"CreatePseudoConsole failed: 0x{hr:X8}");
 
-        // ホストが使うハンドル
-        _hPipeIn  = hPTYInWrite;  // ホスト → 子に送信
-        _hPipeOut = hPTYOutRead;  // 子 → ホストから受信
+        _hPipeIn  = hPTYInWrite;
+        _hPipeOut = hPTYOutRead;
 
         // ── プロセス属性リスト ──────────────────────────────────
         IntPtr attrListSize = IntPtr.Zero;
@@ -154,7 +152,6 @@ public sealed class PseudoConsole : IDisposable
                 throw new InvalidOperationException(
                     $"InitializeProcThreadAttributeList failed: {Marshal.GetLastWin32Error()}");
 
-            // lpValue に hPC の値そのものをポインタとして渡す
             IntPtr hPCVal = _hPC;
             if (!UpdateProcThreadAttribute(
                     attrList, 0,
@@ -166,11 +163,12 @@ public sealed class PseudoConsole : IDisposable
                     $"UpdateProcThreadAttribute failed: {Marshal.GetLastWin32Error()}");
 
             var si = new STARTUPINFOEX();
-            // cb には STARTUPINFOEX 全体のサイズを渡す (ConPTY の要件)
-            si.StartupInfo.cb = Marshal.SizeOf<STARTUPINFOEX>();
-            si.lpAttributeList = attrList;
+            si.StartupInfo.cb         = Marshal.SizeOf<STARTUPINFOEX>();
+            // コンソールウィンドウを非表示にする
+            si.StartupInfo.dwFlags    = STARTF_USESHOWWINDOW;
+            si.StartupInfo.wShowWindow = SW_HIDE;
+            si.lpAttributeList        = attrList;
 
-            // cmd /c でラップして PATH・環境変数を継承
             string fullCmd = $"cmd.exe /c {command}";
 
             if (!CreateProcess(
@@ -187,15 +185,20 @@ public sealed class PseudoConsole : IDisposable
             Marshal.FreeHGlobal(attrList);
             throw;
         }
-        // attrList はプロセス起動後に解放しても OK
         Marshal.FreeHGlobal(attrList);
 
         IsRunning = true;
 
-        // ── 読み取りループ ──────────────────────────────────────
         _cts = new CancellationTokenSource();
         var ct = _cts.Token;
         _ = Task.Run(() => ReadLoop(ct), ct);
+    }
+
+    /// <summary>ConPTY のサイズを変更する（WebView2 リサイズ時に呼ぶ）</summary>
+    public void Resize(short cols, short rows)
+    {
+        if (_hPC != IntPtr.Zero)
+            ResizePseudoConsole(_hPC, new COORD { X = cols, Y = rows });
     }
 
     void ReadLoop(CancellationToken ct)
@@ -205,20 +208,13 @@ public sealed class PseudoConsole : IDisposable
         {
             bool ok = ReadFile(_hPipeOut, buf, (uint)buf.Length, out uint read, IntPtr.Zero);
             if (!ok || read == 0) break;
-            string raw   = Encoding.UTF8.GetString(buf, 0, (int)read);
-            string plain = StripAnsi(raw);
-            if (plain.Length > 0)
-                _dispatcher.TryEnqueue(() => _onOutput(plain));
+            // 生バイト列を UTF-8 文字列として渡す（ANSI エスケープ込み）
+            string raw = Encoding.UTF8.GetString(buf, 0, (int)read);
+            _onOutput(raw);
         }
         IsRunning = false;
-        _dispatcher.TryEnqueue(() => _onOutput("\n[プロセス終了]\n"));
+        _onOutput("\r\n\x1b[90m[プロセス終了]\x1b[0m\r\n");
     }
-
-    static readonly System.Text.RegularExpressions.Regex _ansiRe =
-        new(@"\x1B(\[[0-9;?]*[A-Za-z]|[()][AB012]|\].*?(?:\x07|\x1B\\))",
-            System.Text.RegularExpressions.RegexOptions.Compiled);
-
-    static string StripAnsi(string s) => _ansiRe.Replace(s, "");
 
     public void Stop()
     {

@@ -280,23 +280,9 @@
                             Click="ClearTerminalBtn_Click" />
                 </Grid>
             </Border>
-            <!-- ターミナル本体 -->
-            <Border Grid.Row="1"
-                    Background="#FF0C0C0C"
-                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                    BorderThickness="0,1,0,0">
-                <ScrollViewer x:Name="TerminalScroll"
-                              VerticalScrollBarVisibility="Auto"
-                              HorizontalScrollBarVisibility="Auto"
-                              Padding="12,8">
-                    <TextBlock x:Name="TerminalText"
-                               FontFamily="Cascadia Mono, Consolas, Courier New"
-                               FontSize="12"
-                               Foreground="#FFD4D4D4"
-                               TextWrapping="NoWrap"
-                               IsTextSelectionEnabled="True" />
-                </ScrollViewer>
-            </Border>
+            <!-- xterm.js ターミナル（WebView2） -->
+            <WebView2 Grid.Row="1" x:Name="TerminalWebView"
+                      NavigationCompleted="TerminalWebView_NavigationCompleted" />
         </Grid>
 
         <!-- ── ステータスバー ─────────────────────────────────── -->
