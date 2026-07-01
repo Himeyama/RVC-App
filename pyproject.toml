@@ -1,6 +1,6 @@
 [project]
 name = "rvc-beta"
-version = "0.1.0"
+version = "0.1.1"
 description = "Retrieval-based Voice Conversion WebUI"
 authors = [{ name = "lj1995" }]
 license = { text = "MIT" }

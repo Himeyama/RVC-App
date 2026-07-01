@@ -4,6 +4,17 @@
 
 VITS ベースの音声変換フレームワーク [RVC-Project/Retrieval-based-Voice-Conversion-WebUI](https://github.com/RVC-Project/Retrieval-based-Voice-Conversion-WebUI) のフォークです。Windows 環境でのリアルタイム VC に特化し、WinUI 3 ネイティブ GUI と FastAPI バックエンドを追加しています。ライセンスは上流と同じ MIT を維持しています。
 
+### インストール
+
+[Releases](https://github.com/Himeyama/Retrieval-based-Voice-Conversion-WebUI/releases) ページから最新の `RvcRealtimeGui-Setup-<Version>.exe` をダウンロードしてインストールが可能です。
+
+#### インストール準備
+**`uv` コマンドと、`ffmpeg` をあらかじめインストールし、パスを通しておく必要があります。**
+
+1. `RvcRealtimeGui-Setup-<Version>.exe` を実行してインストール
+2. 初回起動時に Python 仮想環境 (`.venv`) が `uv sync` により自動構築
+3. 「事前学習モデルの取得」の節を参考にモデルを配置
+
 ## このフォークでの主な変更
 
 - **パッケージ管理を [uv](https://docs.astral.sh/uv/) に移行**: `requirements*.txt` / Poetry を廃止し、`pyproject.toml` に一本化
@@ -65,14 +76,6 @@ dotnet run --project RvcRealtimeGui
 ```
 
 WinUI 3 アプリは `/hostapis`、`/devices`、`/config`、`/start`、`/stop`、`/status`、`/metrics`（WebSocket）を通じてリアルタイム VC を制御します。学習パイプライン（`/train/*`）、UVR5 ボーカル分離（`/uvr/*`）、モデルマージ/情報表示/変更/抽出（`/model/*`）も同じ FastAPI サーバーが提供し、WinUI3 アプリの「モデル調整モード」（`ModelTuningPage`）から操作します。
-
-### インストーラーでの導入（エンドユーザー向け）
-
-ビルド不要ですぐに使いたい場合は、[Releases](https://github.com/Himeyama/Retrieval-based-Voice-Conversion-WebUI/releases) ページから最新の `RvcRealtimeGui-Setup-<Version>.exe` をダウンロードして実行してください。タグ (`v*`) の push を契機に GitHub Actions (`.github/workflows/release.yml`) が自動でビルド・公開します。
-
-1. `RvcRealtimeGui-Setup-<Version>.exe` を実行してインストール
-2. 初回起動時に Python 仮想環境 (`.venv`) が `uv sync` により自動構築される（[uv](https://docs.astral.sh/uv/getting-started/installation/) と `ffmpeg` / `ffprobe` が PATH に必要）
-3. 「事前学習モデルの取得」の節を参考にモデルを配置
 
 ### インストーラーのビルド (NSIS)
 
