@@ -1,6 +1,8 @@
+using Microsoft.UI;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 using Microsoft.Web.WebView2.Core;
 using RvcRealtimeGui.Models;
 using RvcRealtimeGui.Services;
@@ -459,9 +461,16 @@ public sealed partial class RvcModePage : Page
 
     async Task ShowErrorAsync(string message)
     {
+        StackPanel titlePanel = new() { Orientation = Orientation.Horizontal, Spacing = 8 };
+        titlePanel.Children.Add(new SymbolIcon(Symbol.Important)
+        {
+            Foreground = new SolidColorBrush(Colors.Red),
+        });
+        titlePanel.Children.Add(new TextBlock { Text = "エラー", VerticalAlignment = VerticalAlignment.Center });
+
         ContentDialog dialog = new()
         {
-            Title = "エラー",
+            Title = titlePanel,
             Content = message,
             CloseButtonText = "OK",
             XamlRoot = XamlRoot,
