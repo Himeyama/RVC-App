@@ -66,6 +66,17 @@ dotnet run --project RvcRealtimeGui
 
 WinUI 3 アプリは `/hostapis`、`/devices`、`/config`、`/start`、`/stop`、`/status`、`/metrics`（WebSocket）を通じてリアルタイム VC を制御します。
 
+### インストーラー (NSIS)
+
+WinUI 3 アプリ単体（自己完結ビルド）を配布する NSIS インストーラーを作成できます。Python 環境やモデルは含まれないため、別途 `uv sync` とモデル配置が必要です。
+
+```powershell
+# 前提: NSIS (makensis) がインストール済みであること
+./installer/build.ps1 -Version 1.0.0
+```
+
+`installer/RvcRealtimeGui-Setup-<Version>.exe` が生成されます。スクリプト本体は `installer/RvcRealtimeGui.nsi`。
+
 ### 操作手順
 
 1. **モデル (.pth)** と **インデックス (.index)** のパスを指定

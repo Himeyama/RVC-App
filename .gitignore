@@ -31,3 +31,7 @@ _fairseq_build/
 # uv
 .uv-cache/
 .claude/
+
+# NSIS installer output
+installer/*.exe
+*.log
