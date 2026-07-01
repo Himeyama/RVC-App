@@ -20,30 +20,6 @@
                            Style="{ThemeResource CaptionTextBlockStyle}"
                            VerticalAlignment="Center" />
             </StackPanel>
-            <!-- 操作ボタン（右） -->
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right"
-                        VerticalAlignment="Center" Margin="0,0,148,0" Spacing="10">
-                <!-- サーバー接続状態 -->
-                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                    <FontIcon Glyph="&#xEBD2;" FontSize="13"
-                              Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                    <TextBlock x:Name="ServerLabel" Text="未接続" VerticalAlignment="Center"
-                               Foreground="{ThemeResource SystemFillColorCautionBrush}"
-                               Style="{ThemeResource CaptionTextBlockStyle}" />
-                </StackPanel>
-                <!-- サーバー起動/停止トグルボタン -->
-                <Button x:Name="ToggleServerBtn"
-                        Height="32" Padding="12,0"
-                        Style="{ThemeResource AccentButtonStyle}"
-                        ToolTipService.ToolTip="api_gui.py を起動"
-                        Click="ToggleServerBtn_Click">
-                    <StackPanel Orientation="Horizontal" Spacing="6">
-                        <FontIcon x:Name="ToggleServerIcon" Glyph="&#xE756;" FontSize="14" VerticalAlignment="Center" />
-                        <TextBlock x:Name="ToggleServerText" Text="サーバー起動" VerticalAlignment="Center"
-                                   Style="{ThemeResource CaptionTextBlockStyle}" />
-                    </StackPanel>
-                </Button>
-            </StackPanel>
         </Grid>
 
         <!-- ── モード切り替え + コンテンツ ─────────────────────── -->

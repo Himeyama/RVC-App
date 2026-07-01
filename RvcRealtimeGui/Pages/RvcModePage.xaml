@@ -11,21 +11,35 @@
             <StackPanel Spacing="14">
 
                 <!-- VC 操作バー -->
-                <Button x:Name="ToggleVcBtn"
-                        Height="32" Padding="12,0"
-                        IsEnabled="False"
-                        Style="{ThemeResource AccentButtonStyle}"
-                        ToolTipService.ToolTip="音声変換 開始"
-                        Click="ToggleVcBtn_Click"
-                        HorizontalAlignment="Left">
-                    <StackPanel Orientation="Horizontal" Spacing="6">
-                        <FontIcon x:Name="ToggleVcIcon" Glyph="&#xE768;" FontSize="14" VerticalAlignment="Center" />
-                        <TextBlock x:Name="VcSpinner" Text="⠋" FontSize="14"
-                                   VerticalAlignment="Center" Visibility="Collapsed" />
-                        <TextBlock x:Name="ToggleVcText" Text="音声変換 開始" VerticalAlignment="Center"
-                                   Style="{ThemeResource CaptionTextBlockStyle}" />
-                    </StackPanel>
-                </Button>
+                <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Left">
+                    <!-- サーバー起動/停止トグルボタン -->
+                    <Button x:Name="ToggleServerBtn"
+                            Height="32" Padding="12,0"
+                            Style="{ThemeResource AccentButtonStyle}"
+                            ToolTipService.ToolTip="api_gui.py を起動"
+                            Click="ToggleServerBtn_Click">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon x:Name="ToggleServerIcon" Glyph="&#xE756;" FontSize="14" VerticalAlignment="Center" />
+                            <TextBlock x:Name="ToggleServerText" Text="サーバー起動" VerticalAlignment="Center"
+                                       Style="{ThemeResource CaptionTextBlockStyle}" />
+                        </StackPanel>
+                    </Button>
+                    <!-- 音声変換 開始/停止トグル -->
+                    <Button x:Name="ToggleVcBtn"
+                            Height="32" Padding="12,0"
+                            IsEnabled="False"
+                            Style="{ThemeResource AccentButtonStyle}"
+                            ToolTipService.ToolTip="音声変換 開始"
+                            Click="ToggleVcBtn_Click">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon x:Name="ToggleVcIcon" Glyph="&#xE768;" FontSize="14" VerticalAlignment="Center" />
+                            <TextBlock x:Name="VcSpinner" Text="⠋" FontSize="14"
+                                       VerticalAlignment="Center" Visibility="Collapsed" />
+                            <TextBlock x:Name="ToggleVcText" Text="音声変換 開始" VerticalAlignment="Center"
+                                       Style="{ThemeResource CaptionTextBlockStyle}" />
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
 
                 <!-- モデル & デバイス（横並び） -->
                 <Grid ColumnDefinitions="*,*" ColumnSpacing="14">
@@ -264,7 +278,7 @@
                     Background="{ThemeResource LayerFillColorDefaultBrush}"
                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                     BorderThickness="0,1,0,0" Padding="16,6">
-                <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto">
+                <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,*,Auto">
                     <!-- 変換状態 -->
                     <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
                         <FontIcon Glyph="&#xE768;" FontSize="13"
@@ -300,8 +314,18 @@
                                    Style="{ThemeResource CaptionTextBlockStyle}" />
                     </StackPanel>
 
+                    <!-- サーバー接続状態 -->
+                    <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center"
+                                Margin="24,0,0,0">
+                        <FontIcon Glyph="&#xEBD2;" FontSize="13"
+                                  Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <TextBlock x:Name="ServerLabel" Text="未接続" VerticalAlignment="Center"
+                                   Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                                   Style="{ThemeResource CaptionTextBlockStyle}" />
+                    </StackPanel>
+
                     <!-- ログ折りたたみトグル -->
-                    <Button Grid.Column="4" x:Name="ToggleTerminalBtn"
+                    <Button Grid.Column="5" x:Name="ToggleTerminalBtn"
                             Height="24" Padding="8,0"
                             Click="ToggleTerminalBtn_Click">
                         <StackPanel Orientation="Horizontal" Spacing="4">

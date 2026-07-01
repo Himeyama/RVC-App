@@ -60,6 +60,8 @@ public sealed partial class MainWindow : Window
                 {
                     _rvcModePage = new RvcModePage();
                     _rvcModePage.Initialize(_api);
+                    _rvcModePage.ToggleServerRequested += async (_, _) => await ToggleServerAsync();
+                    _rvcModePage.SetServerRunning(_runner?.IsRunning == true);
                 }
                 ContentFrame.Content = _rvcModePage;
                 break;
@@ -78,21 +80,7 @@ public sealed partial class MainWindow : Window
 
     // ── サーバープロセス管理 ────────────────────────────────────
 
-    void SetServerRunning(bool running)
-    {
-        if (running)
-        {
-            ToggleServerText.Text = "サーバー停止";
-            ToggleServerIcon.Glyph = "";  // Stop
-            ToolTipService.SetToolTip(ToggleServerBtn, "api_gui.py を停止");
-        }
-        else
-        {
-            ToggleServerText.Text = "サーバー起動";
-            ToggleServerIcon.Glyph = "";  // Play/Server
-            ToolTipService.SetToolTip(ToggleServerBtn, "api_gui.py を起動");
-        }
-    }
+    void SetServerRunning(bool running) => _rvcModePage?.SetServerRunning(running);
 
     void StartServerProcess()
     {
@@ -178,7 +166,7 @@ public sealed partial class MainWindow : Window
 
     // ── イベントハンドラ ────────────────────────────────────────
 
-    async void ToggleServerBtn_Click(object sender, RoutedEventArgs e)
+    async Task ToggleServerAsync()
     {
         // 子プロセスが生きている、もしくはポート 6242 が使われていれば停止フロー。
         // 外部起動 / オーファン python.exe も確実に拾えるようにする。
@@ -199,16 +187,13 @@ public sealed partial class MainWindow : Window
             bool alive = await _api.PingAsync(ct).ConfigureAwait(false);
             _dispatcher.TryEnqueue(() =>
             {
+                _rvcModePage?.SetServerLabel(alive);
                 if (alive)
                 {
-                    ServerLabel.Text = "接続済み";
-                    ServerLabel.Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["SystemFillColorSuccessBrush"];
                     _rvcModePage?.SetVcSpinner(false);
                 }
                 else
                 {
-                    ServerLabel.Text = "未接続";
-                    ServerLabel.Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["SystemFillColorCriticalBrush"];
                     // 子プロセスが実行中（サーバー起動待ち）ならスピナーを表示
                     _rvcModePage?.SetVcSpinner(_runner?.IsRunning == true);
                 }

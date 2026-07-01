@@ -38,10 +38,47 @@ public sealed partial class RvcModePage : Page
         _ = InitTerminalAsync();
     }
 
+    public event EventHandler? ToggleServerRequested;
+
     public void Initialize(RvcApiClient api)
     {
         _api = api;
     }
+
+    // ── サーバー接続状態・起動/停止ボタン UI ────────────────────
+
+    public void SetServerRunning(bool running)
+    {
+        if (running)
+        {
+            ToggleServerText.Text = "サーバー停止";
+            ToggleServerIcon.Glyph = "";  // Stop
+            ToolTipService.SetToolTip(ToggleServerBtn, "api_gui.py を停止");
+        }
+        else
+        {
+            ToggleServerText.Text = "サーバー起動";
+            ToggleServerIcon.Glyph = "";  // Play/Server
+            ToolTipService.SetToolTip(ToggleServerBtn, "api_gui.py を起動");
+        }
+    }
+
+    public void SetServerLabel(bool alive)
+    {
+        if (alive)
+        {
+            ServerLabel.Text = "接続済み";
+            ServerLabel.Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["SystemFillColorSuccessBrush"];
+        }
+        else
+        {
+            ServerLabel.Text = "未接続";
+            ServerLabel.Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["SystemFillColorCriticalBrush"];
+        }
+    }
+
+    void ToggleServerBtn_Click(object sender, RoutedEventArgs e) =>
+        ToggleServerRequested?.Invoke(this, EventArgs.Empty);
 
     public async Task TryInitializeAsync()
     {
