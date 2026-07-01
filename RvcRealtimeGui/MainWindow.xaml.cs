@@ -3,6 +3,7 @@ using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
+using RvcRealtimeGui.Models;
 using RvcRealtimeGui.Pages;
 using RvcRealtimeGui.Services;
 
@@ -69,11 +70,30 @@ public sealed partial class MainWindow : Window
                     _rvcModePage = new RvcModePage();
                     _rvcModePage.Initialize(_api);
                     _rvcModePage.ToggleServerRequested += async (_, _) => await ToggleServerAsync();
+                    _rvcModePage.FileBrowseRequested += (_, req) => ShowFileBrowser(req);
                     _rvcModePage.SetServerRunning(_runner?.IsRunning == true);
                 }
                 ContentFrame.Content = _rvcModePage;
                 break;
         }
+    }
+
+    void ShowFileBrowser(FileBrowseRequest req)
+    {
+        UIElement previous = ContentFrame.Content as UIElement ?? _rvcModePage!;
+
+        FileBrowserPage browserPage = new();
+        browserPage.Initialize(
+            req.ExtensionFilter,
+            req.InitialPath,
+            onSelected: path =>
+            {
+                req.OnSelected(path);
+                ContentFrame.Content = previous;
+            },
+            onCancelled: () => ContentFrame.Content = previous);
+
+        ContentFrame.Content = browserPage;
     }
 
     // ── 初期化 ──────────────────────────────────────────────────

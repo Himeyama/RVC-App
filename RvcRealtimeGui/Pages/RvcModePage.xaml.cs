@@ -7,8 +7,6 @@ using Microsoft.Web.WebView2.Core;
 using RvcRealtimeGui.Models;
 using RvcRealtimeGui.Services;
 using System.Text.Json;
-using Windows.Storage.Pickers;
-using WinRT.Interop;
 
 namespace RvcRealtimeGui.Pages;
 
@@ -41,6 +39,7 @@ public sealed partial class RvcModePage : Page
     }
 
     public event EventHandler? ToggleServerRequested;
+    public event EventHandler<FileBrowseRequest>? FileBrowseRequested;
 
     public void Initialize(RvcApiClient api)
     {
@@ -312,20 +311,15 @@ public sealed partial class RvcModePage : Page
 
     // ── イベントハンドラ ────────────────────────────────────────
 
-    async void BrowsePthBtn_Click(object sender, RoutedEventArgs e) =>
-        await PickFileAsync(PthPathBox, ".pth").ConfigureAwait(true);
+    void BrowsePthBtn_Click(object sender, RoutedEventArgs e) =>
+        RequestFileBrowse(PthPathBox, ".pth");
 
-    async void BrowseIndexBtn_Click(object sender, RoutedEventArgs e) =>
-        await PickFileAsync(IndexPathBox, ".index").ConfigureAwait(true);
+    void BrowseIndexBtn_Click(object sender, RoutedEventArgs e) =>
+        RequestFileBrowse(IndexPathBox, ".index");
 
-    async Task PickFileAsync(TextBox target, string ext)
+    void RequestFileBrowse(TextBox target, string ext)
     {
-        FileOpenPicker picker = new();
-        IntPtr hwnd = WindowNative.GetWindowHandle(App.MainWindowInstance);
-        InitializeWithWindow.Initialize(picker, hwnd);
-        picker.FileTypeFilter.Add(ext);
-        Windows.Storage.StorageFile? file = await picker.PickSingleFileAsync();
-        if (file is not null) target.Text = file.Path;
+        FileBrowseRequested?.Invoke(this, new FileBrowseRequest(ext, target.Text, path => target.Text = path));
     }
 
     async void ReloadDevicesBtn_Click(object sender, RoutedEventArgs e)
