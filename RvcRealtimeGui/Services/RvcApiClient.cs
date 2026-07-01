@@ -133,5 +133,54 @@ public class RvcApiClient : IDisposable
         return r?.JobId ?? "";
     }
 
+    // ── UVR5 ボーカル分離 ────────────────────────────────────────
+
+    public async Task<List<string>> GetUvr5ModelsAsync(CancellationToken ct = default)
+    {
+        Uvr5ModelsResponse? r = await _http.GetFromJsonAsync<Uvr5ModelsResponse>($"{_baseUrl}/uvr5_models", ct)
+            .ConfigureAwait(false);
+        return r?.Models ?? [];
+    }
+
+    public async Task<string> StartUvrSeparateAsync(UvrSeparateRequest req, CancellationToken ct = default) =>
+        await PostForJobIdAsync("/uvr/separate", req, ct).ConfigureAwait(false);
+
+    // ── モデル管理（マージ・情報表示・変更・抽出） ────────────────
+
+    public async Task<string> MergeModelsAsync(ModelMergeRequest req, CancellationToken ct = default) =>
+        await PostForMessageAsync("/model/merge", req, ct).ConfigureAwait(false);
+
+    public async Task<string> GetModelInfoAsync(ModelInfoRequest req, CancellationToken ct = default)
+    {
+        HttpResponseMessage res = await _http.PostAsJsonAsync($"{_baseUrl}/model/info", req, ct).ConfigureAwait(false);
+        if (!res.IsSuccessStatusCode)
+        {
+            string errBody = await res.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+            throw new HttpRequestException($"{(int)res.StatusCode}: {errBody}");
+        }
+        ModelInfoResponse? r = await res.Content.ReadFromJsonAsync<ModelInfoResponse>(cancellationToken: ct)
+            .ConfigureAwait(false);
+        return r?.Info ?? "";
+    }
+
+    public async Task<string> ChangeModelInfoAsync(ModelChangeInfoRequest req, CancellationToken ct = default) =>
+        await PostForMessageAsync("/model/change_info", req, ct).ConfigureAwait(false);
+
+    public async Task<string> ExtractModelAsync(ModelExtractRequest req, CancellationToken ct = default) =>
+        await PostForMessageAsync("/model/extract", req, ct).ConfigureAwait(false);
+
+    async Task<string> PostForMessageAsync<T>(string path, T body, CancellationToken ct)
+    {
+        HttpResponseMessage res = await _http.PostAsJsonAsync($"{_baseUrl}{path}", body, ct).ConfigureAwait(false);
+        if (!res.IsSuccessStatusCode)
+        {
+            string errBody = await res.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+            throw new HttpRequestException($"{(int)res.StatusCode}: {errBody}");
+        }
+        MessageResponse? r = await res.Content.ReadFromJsonAsync<MessageResponse>(cancellationToken: ct)
+            .ConfigureAwait(false);
+        return r?.Message ?? "";
+    }
+
     public void Dispose() => _http.Dispose();
 }

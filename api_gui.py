@@ -39,6 +39,10 @@ from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from i18n.i18n import I18nAuto
+
+i18n = I18nAuto()
+
 logger = logging.getLogger("api_gui")
 
 CONFIG_PATH = "configs/inuse/config.json"
@@ -164,6 +168,45 @@ class Train1KeyRequest(BaseModel):
     if_save_every_weights: bool = False
     version: str = "v2"
     gpus_rmvpe: str = "0-0"
+
+
+class UvrSeparateRequest(BaseModel):
+    model_name: str
+    inp_root: str
+    save_root_vocal: str = "opt"
+    save_root_ins: str = "opt"
+    agg: int = 10
+    format0: str = "flac"
+
+
+class ModelMergeRequest(BaseModel):
+    path1: str
+    path2: str
+    alpha1: float = 0.5
+    sr: str = "40k"
+    f0: bool = True
+    info: str = ""
+    name: str
+    version: str = "v2"
+
+
+class ModelInfoRequest(BaseModel):
+    path: str
+
+
+class ModelChangeInfoRequest(BaseModel):
+    path: str
+    info: str
+    name: str = ""
+
+
+class ModelExtractRequest(BaseModel):
+    path: str
+    name: str
+    sr: str = "40k"
+    if_f0: bool = True
+    info: str = ""
+    version: str = "v2"
 
 
 class JobStatusResponse(BaseModel):
@@ -446,6 +489,40 @@ class TrainingJobManager:
         job = self._new_job("train1key")
         threading.Thread(
             target=self._run_train1key_job, args=(job, req), daemon=True
+        ).start()
+        return job.job_id
+
+    def _run_uvr_job(self, job: TrainingJob, req: UvrSeparateRequest):
+        from infer.modules.uvr5.modules import uvr
+
+        try:
+            prev = ""
+            for message in uvr(
+                req.model_name,
+                req.inp_root,
+                req.save_root_vocal,
+                [],
+                req.save_root_ins,
+                req.agg,
+                req.format0,
+            ):
+                # uvr() は累積済みの全文を毎回 yield するため、差分だけ記録する
+                if message.startswith(prev):
+                    delta = message[len(prev) :].lstrip("\n")
+                else:
+                    delta = message
+                if delta:
+                    job.memory_log.append(delta)
+                prev = message
+            job.status = JobStatus.succeeded
+        except Exception as e:
+            job.status = JobStatus.failed
+            job.error = str(e)
+
+    def start_uvr(self, req: UvrSeparateRequest) -> str:
+        job = self._new_job("uvr_separate")
+        threading.Thread(
+            target=self._run_uvr_job, args=(job, req), daemon=True
         ).start()
         return job.job_id
 
@@ -919,6 +996,80 @@ def get_train_job(job_id: str):
         log_delta=log_delta,
         error=job.error,
     )
+
+
+# ── UVR5 ボーカル分離 ───────────────────────────────────────
+
+
+@app.get("/uvr5_models")
+def get_uvr5_models():
+    root = os.getenv("weight_uvr5_root", "assets/uvr5_weights")
+    names = []
+    if os.path.isdir(root):
+        for name in os.listdir(root):
+            if name.endswith(".pth") or "onnx" in name:
+                names.append(name.replace(".pth", ""))
+    return {"models": names}
+
+
+@app.post("/uvr/separate")
+def post_uvr_separate(req: UvrSeparateRequest):
+    job_id = training_manager.start_uvr(req)
+    return {"job_id": job_id}
+
+
+# ── モデル管理（マージ・情報表示・変更・抽出） ───────────────
+
+
+@app.post("/model/merge")
+def post_model_merge(req: ModelMergeRequest):
+    from infer.lib.train.process_ckpt import merge
+
+    result = merge(
+        req.path1,
+        req.path2,
+        req.alpha1,
+        req.sr,
+        i18n("是") if req.f0 else i18n("否"),
+        req.info,
+        req.name,
+        req.version,
+    )
+    if result != "Success.":
+        raise HTTPException(400, result)
+    return {"message": result}
+
+
+@app.post("/model/info")
+def post_model_info(req: ModelInfoRequest):
+    from infer.lib.train.process_ckpt import show_info
+
+    result = show_info(req.path)
+    if result.startswith("Traceback"):
+        raise HTTPException(400, result)
+    return {"info": result}
+
+
+@app.post("/model/change_info")
+def post_model_change_info(req: ModelChangeInfoRequest):
+    from infer.lib.train.process_ckpt import change_info
+
+    result = change_info(req.path, req.info, req.name)
+    if result != "Success.":
+        raise HTTPException(400, result)
+    return {"message": result}
+
+
+@app.post("/model/extract")
+def post_model_extract(req: ModelExtractRequest):
+    from infer.lib.train.process_ckpt import extract_small_model
+
+    result = extract_small_model(
+        req.path, req.name, req.sr, req.if_f0, req.info, req.version
+    )
+    if result != "Success.":
+        raise HTTPException(400, result)
+    return {"message": result}
 
 
 # ── エントリポイント ─────────────────────────────────────────

@@ -22,6 +22,21 @@ public sealed partial class ModelTuningPage : Page
     public void Initialize(ModelTuningPageContext ctx)
     {
         _api = ctx.Api;
+        _ = LoadUvr5ModelsAsync();
+    }
+
+    async Task LoadUvr5ModelsAsync()
+    {
+        try
+        {
+            List<string> models = await _api.GetUvr5ModelsAsync().ConfigureAwait(true);
+            UvrModelCombo.ItemsSource = models;
+            if (models.Count > 0) UvrModelCombo.SelectedIndex = 0;
+        }
+        catch (Exception ex)
+        {
+            AppendLog($"[UVR5] モデル一覧の取得に失敗しました: {ex.Message}");
+        }
     }
 
     // ── 共通入力の取得 ───────────────────────────────────────────
@@ -224,6 +239,193 @@ public sealed partial class ModelTuningPage : Page
         catch (Exception ex)
         {
             await ShowErrorAsync(ex.Message);
+        }
+    }
+
+    // ── UVR5 ボーカル分離 ────────────────────────────────────────
+
+    async void UvrSeparateBtn_Click(object sender, RoutedEventArgs e)
+    {
+        string inpRoot = UvrInpRootBox.Text.Trim();
+        string modelName = UvrModelCombo.SelectedItem as string ?? "";
+        if (string.IsNullOrEmpty(inpRoot))
+        {
+            await ShowErrorAsync("入力フォルダを指定してください。").ConfigureAwait(true);
+            return;
+        }
+        if (string.IsNullOrEmpty(modelName))
+        {
+            await ShowErrorAsync("UVR5 モデルを選択してください。").ConfigureAwait(true);
+            return;
+        }
+        string format0 = (UvrFormatCombo.SelectedItem as ComboBoxItem)?.Content as string ?? "flac";
+        string outRoot = string.IsNullOrEmpty(UvrOutRootBox.Text.Trim()) ? "opt" : UvrOutRootBox.Text.Trim();
+        var req = new UvrSeparateRequest
+        {
+            ModelName = modelName,
+            InpRoot = inpRoot,
+            SaveRootVocal = outRoot,
+            SaveRootIns = outRoot,
+            Format0 = format0,
+        };
+        try
+        {
+            string jobId = await _api.StartUvrSeparateAsync(req).ConfigureAwait(true);
+            await PollJobAsync(jobId, "UVR5分離", UvrSeparateStatus, UvrSeparateBtn).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            await ShowErrorAsync(ex.Message).ConfigureAwait(true);
+        }
+    }
+
+    async void BrowseUvrInpRootBtn_Click(object sender, RoutedEventArgs e)
+    {
+        FolderPicker picker = new();
+        IntPtr hwnd = WindowNative.GetWindowHandle(App.MainWindowInstance);
+        InitializeWithWindow.Initialize(picker, hwnd);
+        picker.FileTypeFilter.Add("*");
+        Windows.Storage.StorageFolder? folder = await picker.PickSingleFolderAsync();
+        if (folder is not null) UvrInpRootBox.Text = folder.Path;
+    }
+
+    // ── モデルマージ ─────────────────────────────────────────────
+
+    async void MergeBtn_Click(object sender, RoutedEventArgs e)
+    {
+        string path1 = MergePathABox.Text.Trim();
+        string path2 = MergePathBBox.Text.Trim();
+        string name = MergeSaveNameBox.Text.Trim();
+        if (string.IsNullOrEmpty(path1) || string.IsNullOrEmpty(path2) || string.IsNullOrEmpty(name))
+        {
+            await ShowErrorAsync("モデル A・モデル B・保存名をすべて指定してください。").ConfigureAwait(true);
+            return;
+        }
+        string sr = (MergeSrCombo.SelectedItem as ComboBoxItem)?.Content as string ?? "40k";
+        string version = (MergeVersionCombo.SelectedItem as ComboBoxItem)?.Content as string ?? "v2";
+        var req = new ModelMergeRequest
+        {
+            Path1 = path1,
+            Path2 = path2,
+            Alpha1 = MergeAlphaSlider.Value,
+            Sr = sr,
+            F0 = MergeIfF0Check.IsChecked == true,
+            Name = name,
+            Version = version,
+        };
+        MergeBtn.IsEnabled = false;
+        MergeStatus.Text = "実行中...";
+        try
+        {
+            string message = await _api.MergeModelsAsync(req).ConfigureAwait(true);
+            MergeStatus.Text = "完了";
+            AppendLog($"[モデルマージ] {message}");
+        }
+        catch (Exception ex)
+        {
+            MergeStatus.Text = $"失敗: {ex.Message}";
+            AppendLog($"[モデルマージ] エラー: {ex.Message}");
+        }
+        finally
+        {
+            MergeBtn.IsEnabled = true;
+        }
+    }
+
+    // ── モデル情報 表示・変更 ────────────────────────────────────
+
+    async void ShowInfoBtn_Click(object sender, RoutedEventArgs e)
+    {
+        string path = InfoPathBox.Text.Trim();
+        if (string.IsNullOrEmpty(path))
+        {
+            await ShowErrorAsync("モデルパスを指定してください。").ConfigureAwait(true);
+            return;
+        }
+        ShowInfoBtn.IsEnabled = false;
+        ModelInfoStatus.Text = "実行中...";
+        try
+        {
+            string info = await _api.GetModelInfoAsync(new ModelInfoRequest { Path = path }).ConfigureAwait(true);
+            ModelInfoStatus.Text = "完了";
+            AppendLog($"[モデル情報] {info}");
+        }
+        catch (Exception ex)
+        {
+            ModelInfoStatus.Text = $"失敗: {ex.Message}";
+            AppendLog($"[モデル情報] エラー: {ex.Message}");
+        }
+        finally
+        {
+            ShowInfoBtn.IsEnabled = true;
+        }
+    }
+
+    async void ChangeInfoBtn_Click(object sender, RoutedEventArgs e)
+    {
+        string path = InfoPathBox.Text.Trim();
+        if (string.IsNullOrEmpty(path))
+        {
+            await ShowErrorAsync("モデルパスを指定してください。").ConfigureAwait(true);
+            return;
+        }
+        var req = new ModelChangeInfoRequest { Path = path, Info = InfoNewTextBox.Text.Trim() };
+        ChangeInfoBtn.IsEnabled = false;
+        ModelInfoStatus.Text = "実行中...";
+        try
+        {
+            string message = await _api.ChangeModelInfoAsync(req).ConfigureAwait(true);
+            ModelInfoStatus.Text = "完了";
+            AppendLog($"[モデル情報変更] {message}");
+        }
+        catch (Exception ex)
+        {
+            ModelInfoStatus.Text = $"失敗: {ex.Message}";
+            AppendLog($"[モデル情報変更] エラー: {ex.Message}");
+        }
+        finally
+        {
+            ChangeInfoBtn.IsEnabled = true;
+        }
+    }
+
+    // ── モデル抽出 ───────────────────────────────────────────────
+
+    async void ExtractModelBtn_Click(object sender, RoutedEventArgs e)
+    {
+        string path = ExtractPathBox.Text.Trim();
+        string name = ExtractSaveNameBox.Text.Trim();
+        if (string.IsNullOrEmpty(path) || string.IsNullOrEmpty(name))
+        {
+            await ShowErrorAsync("checkpoint パスと保存名を指定してください。").ConfigureAwait(true);
+            return;
+        }
+        string sr = (ExtractSrCombo.SelectedItem as ComboBoxItem)?.Content as string ?? "40k";
+        string version = (ExtractVersionCombo.SelectedItem as ComboBoxItem)?.Content as string ?? "v2";
+        var req = new ModelExtractRequest
+        {
+            Path = path,
+            Name = name,
+            Sr = sr,
+            IfF0 = ExtractIfF0Check.IsChecked == true,
+            Version = version,
+        };
+        ExtractBtn2.IsEnabled = false;
+        ExtractModelStatus.Text = "実行中...";
+        try
+        {
+            string message = await _api.ExtractModelAsync(req).ConfigureAwait(true);
+            ExtractModelStatus.Text = "完了";
+            AppendLog($"[モデル抽出] {message}");
+        }
+        catch (Exception ex)
+        {
+            ExtractModelStatus.Text = $"失敗: {ex.Message}";
+            AppendLog($"[モデル抽出] エラー: {ex.Message}");
+        }
+        finally
+        {
+            ExtractBtn2.IsEnabled = true;
         }
     }
 

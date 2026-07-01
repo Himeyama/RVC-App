@@ -166,6 +166,135 @@
                     </StackPanel>
                 </Border>
 
+                <!-- UVR5 ボーカル分離 -->
+                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1" CornerRadius="8" Padding="16">
+                    <StackPanel Spacing="10">
+                        <TextBlock Text="伴奏・人声分離 (UVR5)" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+                        <Grid ColumnDefinitions="160,*,160,*" RowDefinitions="Auto,Auto" ColumnSpacing="8" RowSpacing="8">
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="入力フォルダ" VerticalAlignment="Center" />
+                            <Grid Grid.Row="0" Grid.Column="1" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                <TextBox Grid.Column="0" x:Name="UvrInpRootBox" />
+                                <Button Grid.Column="1" Content="参照..." Click="BrowseUvrInpRootBtn_Click" />
+                            </Grid>
+                            <TextBlock Grid.Row="0" Grid.Column="2" Text="モデル" VerticalAlignment="Center" />
+                            <ComboBox Grid.Row="0" Grid.Column="3" x:Name="UvrModelCombo" HorizontalAlignment="Stretch" />
+
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="出力形式" VerticalAlignment="Center" />
+                            <ComboBox Grid.Row="1" Grid.Column="1" x:Name="UvrFormatCombo" HorizontalAlignment="Stretch"
+                                      SelectedIndex="1">
+                                <ComboBoxItem Content="wav" />
+                                <ComboBoxItem Content="flac" />
+                                <ComboBoxItem Content="mp3" />
+                                <ComboBoxItem Content="m4a" />
+                            </ComboBox>
+                            <TextBlock Grid.Row="1" Grid.Column="2" Text="出力フォルダ" VerticalAlignment="Center" />
+                            <TextBox Grid.Row="1" Grid.Column="3" x:Name="UvrOutRootBox" Text="opt" />
+                        </Grid>
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <Button x:Name="UvrSeparateBtn" Content="分離を実行" Click="UvrSeparateBtn_Click" />
+                            <TextBlock x:Name="UvrSeparateStatus" Text="未実行" VerticalAlignment="Center"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- モデルマージ -->
+                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1" CornerRadius="8" Padding="16">
+                    <StackPanel Spacing="10">
+                        <TextBlock Text="モデルマージ" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+                        <Grid ColumnDefinitions="160,*,160,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="8" RowSpacing="8">
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="モデル A (.pth)" VerticalAlignment="Center" />
+                            <TextBox Grid.Row="0" Grid.Column="1" x:Name="MergePathABox" />
+                            <TextBlock Grid.Row="0" Grid.Column="2" Text="モデル B (.pth)" VerticalAlignment="Center" />
+                            <TextBox Grid.Row="0" Grid.Column="3" x:Name="MergePathBBox" />
+
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="混合比 (A側)" VerticalAlignment="Center" />
+                            <Slider Grid.Row="1" Grid.Column="1" x:Name="MergeAlphaSlider" Minimum="0" Maximum="1"
+                                    StepFrequency="0.01" Value="0.5" />
+                            <TextBlock Grid.Row="1" Grid.Column="2" Text="保存名" VerticalAlignment="Center" />
+                            <TextBox Grid.Row="1" Grid.Column="3" x:Name="MergeSaveNameBox" />
+
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="サンプリングレート" VerticalAlignment="Center" />
+                            <ComboBox Grid.Row="2" Grid.Column="1" x:Name="MergeSrCombo" HorizontalAlignment="Stretch"
+                                      SelectedIndex="0">
+                                <ComboBoxItem Content="40k" />
+                                <ComboBoxItem Content="48k" />
+                            </ComboBox>
+                            <TextBlock Grid.Row="2" Grid.Column="2" Text="バージョン" VerticalAlignment="Center" />
+                            <ComboBox Grid.Row="2" Grid.Column="3" x:Name="MergeVersionCombo" HorizontalAlignment="Stretch"
+                                      SelectedIndex="1">
+                                <ComboBoxItem Content="v1" />
+                                <ComboBoxItem Content="v2" />
+                            </ComboBox>
+                        </Grid>
+                        <CheckBox x:Name="MergeIfF0Check" Content="F0 あり" IsChecked="True" />
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <Button x:Name="MergeBtn" Content="マージを実行" Click="MergeBtn_Click" />
+                            <TextBlock x:Name="MergeStatus" Text="未実行" VerticalAlignment="Center"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- モデル情報 表示・変更・抽出 -->
+                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1" CornerRadius="8" Padding="16">
+                    <StackPanel Spacing="10">
+                        <TextBlock Text="モデル情報の表示・変更・抽出" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+
+                        <TextBlock Text="情報表示 / 変更 (weights フォルダ内の small model)"
+                                   Style="{ThemeResource CaptionTextBlockStyle}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <Grid ColumnDefinitions="160,*,160,*" ColumnSpacing="8" RowSpacing="8">
+                            <TextBlock Grid.Column="0" Text="モデルパス" VerticalAlignment="Center" />
+                            <TextBox Grid.Column="1" x:Name="InfoPathBox" />
+                            <TextBlock Grid.Column="2" Text="新しい情報 / 名前" VerticalAlignment="Center" />
+                            <TextBox Grid.Column="3" x:Name="InfoNewTextBox" PlaceholderText="変更する場合のみ入力" />
+                        </Grid>
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <Button x:Name="ShowInfoBtn" Content="情報を表示" Click="ShowInfoBtn_Click" />
+                            <Button x:Name="ChangeInfoBtn" Content="情報を変更" Click="ChangeInfoBtn_Click" />
+                            <TextBlock x:Name="ModelInfoStatus" Text="未実行" VerticalAlignment="Center"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        </StackPanel>
+
+                        <TextBlock Text="モデル抽出 (logs フォルダ内の大きい checkpoint から small model を生成)"
+                                   Style="{ThemeResource CaptionTextBlockStyle}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <Grid ColumnDefinitions="160,*,160,*" RowDefinitions="Auto,Auto" ColumnSpacing="8" RowSpacing="8">
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="checkpoint パス" VerticalAlignment="Center" />
+                            <TextBox Grid.Row="0" Grid.Column="1" x:Name="ExtractPathBox" />
+                            <TextBlock Grid.Row="0" Grid.Column="2" Text="保存名" VerticalAlignment="Center" />
+                            <TextBox Grid.Row="0" Grid.Column="3" x:Name="ExtractSaveNameBox" />
+
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="サンプリングレート" VerticalAlignment="Center" />
+                            <ComboBox Grid.Row="1" Grid.Column="1" x:Name="ExtractSrCombo" HorizontalAlignment="Stretch"
+                                      SelectedIndex="1">
+                                <ComboBoxItem Content="32k" />
+                                <ComboBoxItem Content="40k" />
+                                <ComboBoxItem Content="48k" />
+                            </ComboBox>
+                            <TextBlock Grid.Row="1" Grid.Column="2" Text="バージョン" VerticalAlignment="Center" />
+                            <ComboBox Grid.Row="1" Grid.Column="3" x:Name="ExtractVersionCombo" HorizontalAlignment="Stretch"
+                                      SelectedIndex="1">
+                                <ComboBoxItem Content="v1" />
+                                <ComboBoxItem Content="v2" />
+                            </ComboBox>
+                        </Grid>
+                        <CheckBox x:Name="ExtractIfF0Check" Content="F0 あり" IsChecked="True" />
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <Button x:Name="ExtractBtn2" Content="抽出を実行" Click="ExtractModelBtn_Click" />
+                            <TextBlock x:Name="ExtractModelStatus" Text="未実行" VerticalAlignment="Center"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
             </StackPanel>
         </ScrollViewer>
 

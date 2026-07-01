@@ -64,7 +64,7 @@ uv run python api_gui.py
 dotnet run --project RvcRealtimeGui
 ```
 
-WinUI 3 アプリは `/hostapis`、`/devices`、`/config`、`/start`、`/stop`、`/status`、`/metrics`（WebSocket）を通じてリアルタイム VC を制御します。
+WinUI 3 アプリは `/hostapis`、`/devices`、`/config`、`/start`、`/stop`、`/status`、`/metrics`（WebSocket）を通じてリアルタイム VC を制御します。学習パイプライン（`/train/*`）、UVR5 ボーカル分離（`/uvr/*`）、モデルマージ/情報表示/変更/抽出（`/model/*`）も同じ FastAPI サーバーが提供し、WinUI3 アプリの「モデル調整モード」（`ModelTuningPage`）から操作します。
 
 ### インストーラー (NSIS)
 
