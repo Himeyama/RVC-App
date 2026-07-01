@@ -29,4 +29,19 @@
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.2270" />
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.2.0" />
   </ItemGroup>
+
+  <!--
+    WinUI3 のアンパッケージ配布では、ビルドが生成する "$(ProjectName).pri" が
+    そのままでは publish 出力に含まれず、実行時に Microsoft.UI.Xaml.dll が
+    リソース解決に失敗してクラッシュする（起動直後に何も表示されず落ちる）。
+    publish 対象アイテムに resources.pri として明示的に追加する。
+  -->
+  <Target Name="IncludeAppPriInPublish" BeforeTargets="Publish;ComputeResolvedFilesToPublishList">
+    <ItemGroup>
+      <ResolvedFileToPublish Include="$(OutDir)$(ProjectName).pri" Condition="Exists('$(OutDir)$(ProjectName).pri')">
+        <RelativePath>resources.pri</RelativePath>
+        <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      </ResolvedFileToPublish>
+    </ItemGroup>
+  </Target>
 </Project>
