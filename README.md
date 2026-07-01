@@ -66,16 +66,35 @@ dotnet run --project RvcRealtimeGui
 
 WinUI 3 アプリは `/hostapis`、`/devices`、`/config`、`/start`、`/stop`、`/status`、`/metrics`（WebSocket）を通じてリアルタイム VC を制御します。学習パイプライン（`/train/*`）、UVR5 ボーカル分離（`/uvr/*`）、モデルマージ/情報表示/変更/抽出（`/model/*`）も同じ FastAPI サーバーが提供し、WinUI3 アプリの「モデル調整モード」（`ModelTuningPage`）から操作します。
 
-### インストーラー (NSIS)
+### インストーラーでの導入（エンドユーザー向け）
+
+ビルド不要ですぐに使いたい場合は、[Releases](https://github.com/Himeyama/Retrieval-based-Voice-Conversion-WebUI/releases) ページから最新の `RvcRealtimeGui-Setup-<Version>.exe` をダウンロードして実行してください。タグ (`v*`) の push を契機に GitHub Actions (`.github/workflows/release.yml`) が自動でビルド・公開します。
+
+1. `RvcRealtimeGui-Setup-<Version>.exe` を実行してインストール
+2. 初回起動時に Python 仮想環境 (`.venv`) が `uv sync` により自動構築される（[uv](https://docs.astral.sh/uv/getting-started/installation/) と `ffmpeg` / `ffprobe` が PATH に必要）
+3. 「事前学習モデルの取得」の節を参考にモデルを配置
+
+### インストーラーのビルド (NSIS)
 
 WinUI 3 アプリ単体（自己完結ビルド）を配布する NSIS インストーラーを作成できます。Python 環境やモデルは含まれないため、別途 `uv sync` とモデル配置が必要です。
 
+**前提条件**
+
+- .NET SDK（`RvcRealtimeGui/RvcRealtimeGui.csproj` の `TargetFramework` を参照）
+- [NSIS](https://nsis.sourceforge.io/Download)（`makensis.exe`）
+  ```powershell
+  choco install nsis -y
+  ```
+
+**ビルド**
+
 ```powershell
-# 前提: NSIS (makensis) がインストール済みであること
 ./installer/build.ps1 -Version 1.0.0
 ```
 
 `installer/RvcRealtimeGui-Setup-<Version>.exe` が生成されます。スクリプト本体は `installer/RvcRealtimeGui.nsi`。
+
+タグ push (`v*`) 時には同じ手順が GitHub Actions 上で自動実行され、GitHub Release にインストーラーが添付されます（`.github/workflows/release.yml`）。
 
 ### 操作手順
 

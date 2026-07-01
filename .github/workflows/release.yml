@@ -1,0 +1,48 @@
+name: Release Windows Installer
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-installer:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "9.0.x"
+
+      - name: Install NSIS
+        run: choco install nsis -y
+
+      - name: Resolve version from tag
+        id: version
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $version = $tag -replace '^v', ''
+          echo "version=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Build installer
+        run: ./installer/build.ps1 -Version "${{ steps.version.outputs.version }}"
+        shell: pwsh
+
+      - name: Verify installer artifact
+        run: |
+          $path = "installer/RvcRealtimeGui-Setup-${{ steps.version.outputs.version }}.exe"
+          if (-not (Test-Path $path)) { throw "Installer not found: $path" }
+        shell: pwsh
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true
+          files: installer/RvcRealtimeGui-Setup-${{ steps.version.outputs.version }}.exe
