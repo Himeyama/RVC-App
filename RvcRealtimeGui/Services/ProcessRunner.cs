@@ -67,6 +67,28 @@ public sealed class ProcessRunner : IDisposable
     }
 
     /// <summary>
+    /// 起動済みプロセスの終了 (exit code) を待つ。uv sync など完了待ちが必要な用途向け。
+    /// </summary>
+    public Task<int> WaitForExitAsync()
+    {
+        var tcs = new TaskCompletionSource<int>();
+        if (_proc is null)
+        {
+            tcs.SetException(new InvalidOperationException("Process not started"));
+            return tcs.Task;
+        }
+
+        if (_proc.HasExited)
+        {
+            tcs.SetResult(_proc.ExitCode);
+            return tcs.Task;
+        }
+
+        _proc.Exited += (_, _) => tcs.TrySetResult(_proc.ExitCode);
+        return tcs.Task;
+    }
+
+    /// <summary>
     /// プロセスツリーを強制終了する。
     /// </summary>
     public void Stop()

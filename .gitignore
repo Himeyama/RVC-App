@@ -34,4 +34,5 @@ _fairseq_build/
 
 # NSIS installer output
 installer/*.exe
+installer/.stage/
 *.log

@@ -1,11 +1,12 @@
 ; RVC Realtime GUI - NSIS installer script
-; Packages the self-contained `dotnet publish` output of RvcRealtimeGui.
+; Packages the self-contained `dotnet publish` output of RvcRealtimeGui,
+; together with a `git archive` export of the Python backend source (python-src\).
 
 !include "MUI2.nsh"
 
-; ---- Build-time parameters (override with /DPUBLISH_DIR=... /DAPP_VERSION=...) ----
-!ifndef PUBLISH_DIR
-  !define PUBLISH_DIR "..\RvcRealtimeGui\bin\Release\net9.0-windows10.0.26100.0\win-x64\publish"
+; ---- Build-time parameters (override with /DSTAGE_DIR=... /DAPP_VERSION=...) ----
+!ifndef STAGE_DIR
+  !define STAGE_DIR "..\installer\.stage"
 !endif
 !ifndef APP_VERSION
   !define APP_VERSION "1.0.0"
@@ -51,7 +52,7 @@ Var StartMenuFolder
 ; ---- Install ----
 Section "Install" SecInstall
   SetOutPath "$INSTDIR"
-  File /r "${PUBLISH_DIR}\*.*"
+  File /r "${STAGE_DIR}\*.*"
 
   WriteUninstaller "$INSTDIR\Uninstall.exe"
 

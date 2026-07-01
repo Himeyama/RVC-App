@@ -65,6 +65,13 @@ public sealed partial class RvcModePage : Page
         }
     }
 
+    public void SetSetupInProgress(bool inProgress)
+    {
+        SetupInfoBar.IsOpen = inProgress;
+        ToggleServerBtn.IsEnabled = !inProgress;
+        ToggleVcBtn.IsEnabled = !inProgress && IsVcRunning;
+    }
+
     public void SetServerLabel(bool alive)
     {
         if (alive)

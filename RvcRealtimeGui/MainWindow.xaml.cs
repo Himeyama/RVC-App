@@ -1,6 +1,8 @@
+using Microsoft.UI;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 using RvcRealtimeGui.Pages;
 using RvcRealtimeGui.Services;
 
@@ -79,9 +81,97 @@ public sealed partial class MainWindow : Window
     async Task InitializeAsync()
     {
         if (_statusCts is not null) return;
+
+        string projectRoot = ResolveProjectRoot();
+        bool isInstalled = System.IO.Directory.Exists(
+            System.IO.Path.Combine(AppContext.BaseDirectory, "python-src"));
+
+        if (isInstalled && NeedsFirstTimeSetup(projectRoot))
+        {
+            await RunFirstTimeSetupFlowAsync(projectRoot);
+        }
+
         _statusCts = new CancellationTokenSource();
         _ = PollServerStatusAsync(_statusCts.Token);
-        await Task.CompletedTask;
+    }
+
+    // ── 初回セットアップ (uv sync) ──────────────────────────────
+
+    static string SetupMarkerPath(string projectRoot) =>
+        System.IO.Path.Combine(projectRoot, ".venv", ".setup-ok");
+
+    static bool NeedsFirstTimeSetup(string projectRoot) =>
+        !System.IO.File.Exists(SetupMarkerPath(projectRoot));
+
+    async Task RunFirstTimeSetupFlowAsync(string projectRoot)
+    {
+        _rvcModePage?.SetSetupInProgress(true);
+        try
+        {
+            await RunFirstTimeSetupAsync(projectRoot);
+        }
+        catch (Exception ex)
+        {
+            AppendTerminal($"\x1b[31m[RvcRealtimeGui] 初回セットアップに失敗しました: {ex.Message}\x1b[0m\r\n");
+            await ShowErrorAsync($"初回セットアップに失敗しました。\r\n\r\n{ex.Message}\r\n\r\nサーバーログを確認してください。");
+        }
+        finally
+        {
+            _rvcModePage?.SetSetupInProgress(false);
+        }
+    }
+
+    async Task RunFirstTimeSetupAsync(string projectRoot)
+    {
+        string? uvPath = FindInPath("uv.exe");
+        if (uvPath is null)
+        {
+            AppendTerminal("\x1b[31m[RvcRealtimeGui] uv.exe が見つかりません。\x1b[0m\r\n");
+            AppendTerminal("\x1b[33m[RvcRealtimeGui] https://docs.astral.sh/uv/getting-started/installation/ の手順で uv をインストールし、PATH に追加した上でアプリを再起動してください。\x1b[0m\r\n");
+            throw new InvalidOperationException("uv.exe が見つかりません（PATH未設定）。");
+        }
+
+        using var setupRunner = new ProcessRunner(text => _dispatcher.TryEnqueue(() => AppendTerminal(text)));
+        var env = new Dictionary<string, string>
+        {
+            ["PYTHONUNBUFFERED"] = "1",
+            ["PYTHONIOENCODING"] = "utf-8",
+            ["FORCE_COLOR"] = "1",
+        };
+
+        AppendTerminal("\x1b[36m[RvcRealtimeGui] 初回セットアップ: uv sync を実行しています…\x1b[0m\r\n");
+        setupRunner.Start(uvPath, "sync", workingDirectory: projectRoot, extraEnv: env);
+        int exitCode = await setupRunner.WaitForExitAsync();
+
+        if (exitCode != 0)
+        {
+            AppendTerminal($"\x1b[31m[RvcRealtimeGui] uv sync が失敗しました (exit={exitCode})。\x1b[0m\r\n");
+            throw new InvalidOperationException($"uv sync が exit code {exitCode} で終了しました。");
+        }
+
+        string markerPath = SetupMarkerPath(projectRoot);
+        System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(markerPath)!);
+        System.IO.File.WriteAllText(markerPath, DateTime.UtcNow.ToString("O"));
+        AppendTerminal("\x1b[32m[RvcRealtimeGui] 初回セットアップが完了しました。\x1b[0m\r\n");
+    }
+
+    async Task ShowErrorAsync(string message)
+    {
+        StackPanel titlePanel = new() { Orientation = Orientation.Horizontal, Spacing = 8 };
+        titlePanel.Children.Add(new SymbolIcon(Symbol.Important)
+        {
+            Foreground = new SolidColorBrush(Microsoft.UI.Colors.Red),
+        });
+        titlePanel.Children.Add(new TextBlock { Text = "エラー", VerticalAlignment = VerticalAlignment.Center });
+
+        ContentDialog dialog = new()
+        {
+            Title = titlePanel,
+            Content = message,
+            CloseButtonText = "OK",
+            XamlRoot = Content.XamlRoot,
+        };
+        await dialog.ShowAsync();
     }
 
     // ── サーバープロセス管理 ────────────────────────────────────
@@ -93,11 +183,25 @@ public sealed partial class MainWindow : Window
         _runner?.Dispose();
         _runner = new ProcessRunner(text => _dispatcher.TryEnqueue(() => AppendTerminal(text)));
 
-        string projectRoot = System.IO.Path.GetFullPath(
-            System.IO.Path.Combine(AppContext.BaseDirectory, @"..\..\..\..\.."));
+        string projectRoot = ResolveProjectRoot();
         string apiScript = System.IO.Path.Combine(projectRoot, "api_gui.py");
+        if (!System.IO.File.Exists(apiScript))
+        {
+            AppendTerminal($"\x1b[31m[RvcRealtimeGui] api_gui.py が見つかりません: {apiScript}\x1b[0m\r\n");
+            _runner?.Dispose();
+            _runner = null;
+            return;
+        }
 
-        string uvExe = FindInPath("uv.exe") ?? "uv.exe";
+        string? foundUv = FindInPath("uv.exe");
+        if (foundUv is null)
+        {
+            AppendTerminal("\x1b[31m[RvcRealtimeGui] uv.exe が見つかりません。https://docs.astral.sh/uv/getting-started/installation/ の手順でインストールし、PATH に追加してください。\x1b[0m\r\n");
+            _runner?.Dispose();
+            _runner = null;
+            return;
+        }
+        string uvExe = foundUv;
         string args = $"run python -u \"{apiScript}\"";
 
         var env = new Dictionary<string, string>
@@ -123,6 +227,21 @@ public sealed partial class MainWindow : Window
     }
 
     void AppendTerminal(string text) => _rvcModePage?.AppendTerminal(text);
+
+    /// <summary>
+    /// Python バックエンド (api_gui.py) のルートディレクトリを解決する。
+    /// インストール済み環境では実行ファイルと同階層に配置された python-src\ を優先し、
+    /// 無ければ開発時 (dotnet run/publish のビルド出力から遡る) の相対パスにフォールバックする。
+    /// </summary>
+    static string ResolveProjectRoot()
+    {
+        string installedCandidate = System.IO.Path.Combine(AppContext.BaseDirectory, "python-src");
+        if (System.IO.Directory.Exists(installedCandidate))
+            return installedCandidate;
+
+        return System.IO.Path.GetFullPath(
+            System.IO.Path.Combine(AppContext.BaseDirectory, @"..\..\..\..\.."));
+    }
 
     static string? FindInPath(string exe)
     {
