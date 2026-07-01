@@ -95,5 +95,43 @@ public class RvcApiClient : IDisposable
         }
     }
 
+    // ── 学習系 ────────────────────────────────────────────────
+
+    public async Task<string> StartPreprocessAsync(PreprocessRequest req, CancellationToken ct = default) =>
+        await PostForJobIdAsync("/train/preprocess", req, ct).ConfigureAwait(false);
+
+    public async Task<string> StartExtractF0FeatureAsync(ExtractF0FeatureRequest req, CancellationToken ct = default) =>
+        await PostForJobIdAsync("/train/extract_f0_feature", req, ct).ConfigureAwait(false);
+
+    public async Task<string> StartTrainAsync(TrainRequest req, CancellationToken ct = default) =>
+        await PostForJobIdAsync("/train/start", req, ct).ConfigureAwait(false);
+
+    public async Task<string> StartTrainIndexAsync(TrainIndexRequest req, CancellationToken ct = default) =>
+        await PostForJobIdAsync("/train/index", req, ct).ConfigureAwait(false);
+
+    public async Task<string> StartOneClickTrainAsync(Train1KeyRequest req, CancellationToken ct = default) =>
+        await PostForJobIdAsync("/train/one_click", req, ct).ConfigureAwait(false);
+
+    public async Task<JobStatusResponse> GetTrainingJobAsync(string jobId, CancellationToken ct = default)
+    {
+        JobStatusResponse? r = await _http
+            .GetFromJsonAsync<JobStatusResponse>($"{_baseUrl}/train/jobs/{Uri.EscapeDataString(jobId)}", ct)
+            .ConfigureAwait(false);
+        return r ?? new JobStatusResponse();
+    }
+
+    async Task<string> PostForJobIdAsync<T>(string path, T body, CancellationToken ct)
+    {
+        HttpResponseMessage res = await _http.PostAsJsonAsync($"{_baseUrl}{path}", body, ct).ConfigureAwait(false);
+        if (!res.IsSuccessStatusCode)
+        {
+            string errBody = await res.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+            throw new HttpRequestException($"{(int)res.StatusCode}: {errBody}");
+        }
+        JobStartResponse? r = await res.Content.ReadFromJsonAsync<JobStartResponse>(cancellationToken: ct)
+            .ConfigureAwait(false);
+        return r?.JobId ?? "";
+    }
+
     public void Dispose() => _http.Dispose();
 }

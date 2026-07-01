@@ -20,8 +20,13 @@ import logging
 import os
 import re
 import shutil
+import subprocess
 import sys
+import threading
 import time
+import uuid
+from dataclasses import dataclass, field
+from enum import Enum
 from multiprocessing import Process, Queue, cpu_count, freeze_support
 from typing import Optional
 
@@ -38,6 +43,7 @@ logger = logging.getLogger("api_gui")
 
 CONFIG_PATH = "configs/inuse/config.json"
 DEFAULT_CONFIG_PATH = "configs/config.json"
+NOW_DIR = os.getcwd()
 
 # ── プロセスプール (Harvest) ──────────────────────────────────────────
 
@@ -96,6 +102,358 @@ class StatusResponse(BaseModel):
     running: bool
     samplerate: int = 0
     delay_ms: int = 0
+
+
+class PreprocessRequest(BaseModel):
+    trainset_dir: str
+    exp_dir: str
+    sr: str = "40k"
+    n_p: int = 4
+    noparallel: bool = False
+    preprocess_per: float = 3.0
+
+
+class ExtractF0FeatureRequest(BaseModel):
+    exp_dir: str
+    gpus: str = "0"
+    n_p: int = 4
+    f0method: str = "rmvpe_gpu"
+    if_f0: bool = True
+    version: str = "v2"
+    gpus_rmvpe: str = "0-0"
+
+
+class TrainRequest(BaseModel):
+    exp_dir: str
+    sr: str = "40k"
+    if_f0: bool = True
+    spk_id: int = 0
+    save_epoch: int = 5
+    total_epoch: int = 20
+    batch_size: int = 4
+    if_save_latest: bool = False
+    pretrained_g: str = ""
+    pretrained_d: str = ""
+    gpus: str = "0"
+    if_cache_gpu: bool = False
+    if_save_every_weights: bool = False
+    version: str = "v2"
+
+
+class TrainIndexRequest(BaseModel):
+    exp_dir: str
+    version: str = "v2"
+
+
+class Train1KeyRequest(BaseModel):
+    exp_dir: str
+    trainset_dir: str
+    sr: str = "40k"
+    if_f0: bool = True
+    spk_id: int = 0
+    n_p: int = 4
+    f0method: str = "rmvpe_gpu"
+    save_epoch: int = 5
+    total_epoch: int = 20
+    batch_size: int = 4
+    if_save_latest: bool = False
+    pretrained_g: str = ""
+    pretrained_d: str = ""
+    gpus: str = "0"
+    if_cache_gpu: bool = False
+    if_save_every_weights: bool = False
+    version: str = "v2"
+    gpus_rmvpe: str = "0-0"
+
+
+class JobStatusResponse(BaseModel):
+    job_id: str
+    kind: str
+    status: str
+    log_delta: str = ""
+    error: Optional[str] = None
+
+
+class JobStatus(str, Enum):
+    running = "running"
+    succeeded = "succeeded"
+    failed = "failed"
+
+
+@dataclass
+class TrainingJob:
+    job_id: str
+    kind: str
+    status: JobStatus = JobStatus.running
+    log_path: Optional[str] = None
+    log_offset: int = 0
+    memory_log: list = field(default_factory=list)
+    memory_log_offset: int = 0
+    error: Optional[str] = None
+
+
+class TrainingJobManager:
+    """学習系サブプロセスのジョブ管理。AudioServerとは独立した責務。"""
+
+    def __init__(self):
+        self._jobs: dict[str, TrainingJob] = {}
+        self._lock = threading.Lock()
+
+    def get_job(self, job_id: str) -> TrainingJob:
+        with self._lock:
+            job = self._jobs.get(job_id)
+        if job is None:
+            raise HTTPException(404, f"ジョブが見つかりません: {job_id}")
+        return job
+
+    def _new_job(self, kind: str) -> TrainingJob:
+        job = TrainingJob(job_id=uuid.uuid4().hex, kind=kind)
+        with self._lock:
+            self._jobs[job.job_id] = job
+        return job
+
+    def read_log_delta(self, job: TrainingJob) -> str:
+        if job.log_path is not None and os.path.exists(job.log_path):
+            with open(job.log_path, "r", encoding="utf-8", errors="ignore") as f:
+                f.seek(job.log_offset)
+                delta = f.read()
+                job.log_offset = f.tell()
+            return delta
+        if job.memory_log:
+            delta = "\n".join(job.memory_log[job.memory_log_offset :])
+            job.memory_log_offset = len(job.memory_log)
+            return delta
+        return ""
+
+    def _run_popen_job(self, job: TrainingJob, cmds: list[str]):
+        try:
+            for cmd in cmds:
+                logger.info("Execute: %s", cmd)
+                p = subprocess.Popen(cmd, shell=True, cwd=NOW_DIR)
+                p.wait()
+                if p.returncode != 0:
+                    job.status = JobStatus.failed
+                    job.error = f"コマンドが失敗しました (exit={p.returncode}): {cmd}"
+                    return
+            job.status = JobStatus.succeeded
+        except Exception as e:
+            job.status = JobStatus.failed
+            job.error = str(e)
+
+    def start_preprocess(self, req: PreprocessRequest) -> str:
+        from infer.modules.train import training_jobs
+
+        cmd, log_path = training_jobs.build_preprocess_cmd(
+            python_cmd=_config().python_cmd,
+            now_dir=NOW_DIR,
+            trainset_dir=req.trainset_dir,
+            exp_dir=req.exp_dir,
+            sr=req.sr,
+            n_p=req.n_p,
+            noparallel=req.noparallel,
+            preprocess_per=req.preprocess_per,
+        )
+        job = self._new_job("preprocess")
+        job.log_path = log_path
+        threading.Thread(
+            target=self._run_popen_job, args=(job, [cmd]), daemon=True
+        ).start()
+        return job.job_id
+
+    def start_extract_f0_feature(self, req: ExtractF0FeatureRequest) -> str:
+        from infer.modules.train import training_jobs
+
+        cfg = _config()
+        cmds, log_path = training_jobs.build_extract_f0_feature_cmds(
+            python_cmd=cfg.python_cmd,
+            now_dir=NOW_DIR,
+            gpus=req.gpus,
+            n_p=req.n_p,
+            f0method=req.f0method,
+            if_f0=req.if_f0,
+            exp_dir=req.exp_dir,
+            version=req.version,
+            gpus_rmvpe=req.gpus_rmvpe,
+            device=cfg.device,
+            is_half=cfg.is_half,
+        )
+        job = self._new_job("extract_f0_feature")
+        job.log_path = log_path
+        threading.Thread(
+            target=self._run_popen_job, args=(job, cmds), daemon=True
+        ).start()
+        return job.job_id
+
+    def start_train(self, req: TrainRequest) -> str:
+        from infer.modules.train import training_jobs
+
+        training_jobs.write_filelist(
+            now_dir=NOW_DIR,
+            exp_dir1=req.exp_dir,
+            if_f0=req.if_f0,
+            spk_id=req.spk_id,
+            version=req.version,
+            sr2=req.sr,
+        )
+        cmd = training_jobs.build_train_cmd(
+            python_cmd=_config().python_cmd,
+            exp_dir1=req.exp_dir,
+            sr2=req.sr,
+            if_f0=req.if_f0,
+            save_epoch=req.save_epoch,
+            total_epoch=req.total_epoch,
+            batch_size=req.batch_size,
+            if_save_latest=req.if_save_latest,
+            pretrained_g=req.pretrained_g,
+            pretrained_d=req.pretrained_d,
+            gpus=req.gpus,
+            if_cache_gpu=req.if_cache_gpu,
+            if_save_every_weights=req.if_save_every_weights,
+            version=req.version,
+        )
+        job = self._new_job("train")
+        job.log_path = "%s/logs/%s/train.log" % (NOW_DIR, req.exp_dir)
+        threading.Thread(
+            target=self._run_popen_job, args=(job, [cmd]), daemon=True
+        ).start()
+        return job.job_id
+
+    def _run_train_index_job(self, job: TrainingJob, exp_dir: str, version: str):
+        from infer.modules.train import training_jobs
+
+        try:
+            for message in training_jobs.run_train_index(
+                now_dir=NOW_DIR,
+                exp_dir1=exp_dir,
+                version=version,
+                outside_index_root=os.getenv("outside_index_root", "assets/indices"),
+                n_cpu=_config().n_cpu,
+            ):
+                job.memory_log.append(message)
+            job.status = JobStatus.succeeded
+        except Exception as e:
+            job.status = JobStatus.failed
+            job.error = str(e)
+
+    def start_train_index(self, req: TrainIndexRequest) -> str:
+        job = self._new_job("train_index")
+        threading.Thread(
+            target=self._run_train_index_job,
+            args=(job, req.exp_dir, req.version),
+            daemon=True,
+        ).start()
+        return job.job_id
+
+    def _run_train1key_job(self, job: TrainingJob, req: Train1KeyRequest):
+        from infer.modules.train import training_jobs
+
+        def append(label: str, text: str):
+            for line in text.splitlines() or [""]:
+                job.memory_log.append(f"[{label}] {line}")
+
+        try:
+            append("前処理", "開始")
+            preprocess_job = self._new_job("preprocess")
+            cmd, log_path = training_jobs.build_preprocess_cmd(
+                python_cmd=_config().python_cmd,
+                now_dir=NOW_DIR,
+                trainset_dir=req.trainset_dir,
+                exp_dir=req.exp_dir,
+                sr=req.sr,
+                n_p=req.n_p,
+                noparallel=False,
+                preprocess_per=3.0,
+            )
+            self._run_popen_job(preprocess_job, [cmd])
+            append("前処理", "完了" if preprocess_job.status == JobStatus.succeeded else f"失敗: {preprocess_job.error}")
+            if preprocess_job.status != JobStatus.succeeded:
+                job.status = JobStatus.failed
+                job.error = preprocess_job.error
+                return
+
+            append("特徴抽出", "開始")
+            cfg = _config()
+            extract_job = self._new_job("extract_f0_feature")
+            cmds, _log_path = training_jobs.build_extract_f0_feature_cmds(
+                python_cmd=cfg.python_cmd,
+                now_dir=NOW_DIR,
+                gpus=req.gpus,
+                n_p=req.n_p,
+                f0method=req.f0method,
+                if_f0=req.if_f0,
+                exp_dir=req.exp_dir,
+                version=req.version,
+                gpus_rmvpe=req.gpus_rmvpe,
+                device=cfg.device,
+                is_half=cfg.is_half,
+            )
+            self._run_popen_job(extract_job, cmds)
+            append("特徴抽出", "完了" if extract_job.status == JobStatus.succeeded else f"失敗: {extract_job.error}")
+            if extract_job.status != JobStatus.succeeded:
+                job.status = JobStatus.failed
+                job.error = extract_job.error
+                return
+
+            append("学習", "開始")
+            training_jobs.write_filelist(
+                now_dir=NOW_DIR,
+                exp_dir1=req.exp_dir,
+                if_f0=req.if_f0,
+                spk_id=req.spk_id,
+                version=req.version,
+                sr2=req.sr,
+            )
+            train_cmd = training_jobs.build_train_cmd(
+                python_cmd=cfg.python_cmd,
+                exp_dir1=req.exp_dir,
+                sr2=req.sr,
+                if_f0=req.if_f0,
+                save_epoch=req.save_epoch,
+                total_epoch=req.total_epoch,
+                batch_size=req.batch_size,
+                if_save_latest=req.if_save_latest,
+                pretrained_g=req.pretrained_g,
+                pretrained_d=req.pretrained_d,
+                gpus=req.gpus,
+                if_cache_gpu=req.if_cache_gpu,
+                if_save_every_weights=req.if_save_every_weights,
+                version=req.version,
+            )
+            train_job = self._new_job("train")
+            self._run_popen_job(train_job, [train_cmd])
+            append("学習", "完了" if train_job.status == JobStatus.succeeded else f"失敗: {train_job.error}")
+            if train_job.status != JobStatus.succeeded:
+                job.status = JobStatus.failed
+                job.error = train_job.error
+                return
+
+            append("インデックス作成", "開始")
+            for message in training_jobs.run_train_index(
+                now_dir=NOW_DIR,
+                exp_dir1=req.exp_dir,
+                version=req.version,
+                outside_index_root=os.getenv("outside_index_root", "assets/indices"),
+                n_cpu=cfg.n_cpu,
+            ):
+                append("インデックス作成", message)
+
+            job.status = JobStatus.succeeded
+        except Exception as e:
+            job.status = JobStatus.failed
+            job.error = str(e)
+
+    def start_train1key(self, req: Train1KeyRequest) -> str:
+        job = self._new_job("train1key")
+        threading.Thread(
+            target=self._run_train1key_job, args=(job, req), daemon=True
+        ).start()
+        return job.job_id
+
+
+def _config():
+    if server.config is None:
+        raise HTTPException(503, "サーバーが初期化中です")
+    return server.config
 
 
 # ── オーディオサーバ本体 ────────────────────────────────────────
@@ -439,6 +797,7 @@ def phase_vocoder(a, b, fade_out, fade_in):
 
 
 server = AudioServer()
+training_manager = TrainingJobManager()
 app = FastAPI(title="RVC Realtime GUI API")
 app.add_middleware(
     CORSMiddleware,
@@ -514,6 +873,52 @@ async def metrics_ws(ws: WebSocket):
             await ws.send_json(data)
     except WebSocketDisconnect:
         pass
+
+
+# ── 学習系エンドポイント ─────────────────────────────────────
+
+
+@app.post("/train/preprocess")
+def post_train_preprocess(req: PreprocessRequest):
+    job_id = training_manager.start_preprocess(req)
+    return {"job_id": job_id}
+
+
+@app.post("/train/extract_f0_feature")
+def post_train_extract_f0_feature(req: ExtractF0FeatureRequest):
+    job_id = training_manager.start_extract_f0_feature(req)
+    return {"job_id": job_id}
+
+
+@app.post("/train/start")
+def post_train_start(req: TrainRequest):
+    job_id = training_manager.start_train(req)
+    return {"job_id": job_id}
+
+
+@app.post("/train/index")
+def post_train_index(req: TrainIndexRequest):
+    job_id = training_manager.start_train_index(req)
+    return {"job_id": job_id}
+
+
+@app.post("/train/one_click")
+def post_train_one_click(req: Train1KeyRequest):
+    job_id = training_manager.start_train1key(req)
+    return {"job_id": job_id}
+
+
+@app.get("/train/jobs/{job_id}", response_model=JobStatusResponse)
+def get_train_job(job_id: str):
+    job = training_manager.get_job(job_id)
+    log_delta = training_manager.read_log_delta(job)
+    return JobStatusResponse(
+        job_id=job.job_id,
+        kind=job.kind,
+        status=job.status.value,
+        log_delta=log_delta,
+        error=job.error,
+    )
 
 
 # ── エントリポイント ─────────────────────────────────────────
