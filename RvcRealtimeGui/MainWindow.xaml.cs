@@ -8,9 +8,15 @@ namespace RvcRealtimeGui;
 
 public sealed partial class MainWindow : Window
 {
+    const int NormalPollIntervalMs = 3000;
+    const int FastPollIntervalMs = 500;
+    const int FastPollDurationMs = 10000;
+
     readonly RvcApiClient _api = new();
     readonly DispatcherQueue _dispatcher;
+    readonly SemaphoreSlim _statusPollTrigger = new(0);
     CancellationTokenSource? _statusCts;
+    long _fastPollUntilTick;
 
     ProcessRunner? _runner;
 
@@ -176,6 +182,17 @@ public sealed partial class MainWindow : Window
             await StopServerProcessAsync();
         else
             StartServerProcess();
+
+        // 起動/停止操作の直後にポーリング待ちを打ち切って即座に状態を反映し、
+        // その後しばらくは短い間隔で状態変化を素早く検知する
+        _fastPollUntilTick = Environment.TickCount64 + FastPollDurationMs;
+        TriggerStatusPoll();
+    }
+
+    void TriggerStatusPoll()
+    {
+        if (_statusPollTrigger.CurrentCount == 0)
+            _statusPollTrigger.Release();
     }
 
     // ── バックグラウンド ────────────────────────────────────────
@@ -200,7 +217,8 @@ public sealed partial class MainWindow : Window
                 _rvcModePage?.SetServerConnected(alive);
                 if (alive) _rvcModePage?.TryInitializeAsync();
             });
-            try { await Task.Delay(3000, ct).ConfigureAwait(false); } catch { return; }
+            int interval = Environment.TickCount64 < _fastPollUntilTick ? FastPollIntervalMs : NormalPollIntervalMs;
+            try { await _statusPollTrigger.WaitAsync(interval, ct).ConfigureAwait(false); } catch { return; }
         }
     }
 }
