@@ -1,0 +1,191 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Page
+    x:Class="RvcRealtimeGui.Pages.ModelTuningPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Grid RowDefinitions="Auto,*,Auto">
+
+        <!-- ── 実験設定（共通入力） ─────────────────────────────── -->
+        <Border Grid.Row="0"
+                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                BorderThickness="0,0,0,1" Padding="20,12">
+            <StackPanel Spacing="10">
+                <TextBlock Text="実験設定" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+                <Grid ColumnDefinitions="120,*,120,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="8" RowSpacing="8">
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="実験名" VerticalAlignment="Center" />
+                    <TextBox Grid.Row="0" Grid.Column="1" x:Name="ExpDirBox" Text="my-experiment" />
+                    <TextBlock Grid.Row="0" Grid.Column="2" Text="話者ID" VerticalAlignment="Center" />
+                    <NumberBox Grid.Row="0" Grid.Column="3" x:Name="SpkIdBox" Value="0" Minimum="0"
+                               SpinButtonPlacementMode="Compact" />
+
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="データディレクトリ" VerticalAlignment="Center" />
+                    <Grid Grid.Row="1" Grid.Column="1" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                        <TextBox Grid.Column="0" x:Name="TrainsetDirBox" />
+                        <Button Grid.Column="1" Content="参照..." Click="BrowseTrainsetDirBtn_Click" />
+                    </Grid>
+                    <TextBlock Grid.Row="1" Grid.Column="2" Text="バージョン" VerticalAlignment="Center" />
+                    <ComboBox Grid.Row="1" Grid.Column="3" x:Name="VersionCombo" HorizontalAlignment="Stretch"
+                              SelectedIndex="1">
+                        <ComboBoxItem Content="v1" />
+                        <ComboBoxItem Content="v2" />
+                    </ComboBox>
+
+                    <TextBlock Grid.Row="2" Grid.Column="0" Text="サンプリングレート" VerticalAlignment="Center" />
+                    <ComboBox Grid.Row="2" Grid.Column="1" x:Name="SrCombo" HorizontalAlignment="Stretch"
+                              SelectedIndex="1">
+                        <ComboBoxItem Content="32k" />
+                        <ComboBoxItem Content="40k" />
+                        <ComboBoxItem Content="48k" />
+                    </ComboBox>
+                    <TextBlock Grid.Row="2" Grid.Column="2" Text="音高ガイド" VerticalAlignment="Center" />
+                    <CheckBox Grid.Row="2" Grid.Column="3" x:Name="IfF0Check" Content="F0 あり" IsChecked="True" />
+                </Grid>
+            </StackPanel>
+        </Border>
+
+        <!-- ── ステップカード ───────────────────────────────────── -->
+        <ScrollViewer Grid.Row="1" Padding="20,12,20,12" VerticalScrollBarVisibility="Auto">
+            <StackPanel Spacing="14">
+
+                <!-- Step1 前処理 -->
+                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1" CornerRadius="8" Padding="16">
+                    <StackPanel Spacing="10">
+                        <TextBlock Text="Step 1: 前処理" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+                        <Grid ColumnDefinitions="160,*" ColumnSpacing="8">
+                            <TextBlock Grid.Column="0" Text="CPUプロセス数" VerticalAlignment="Center" />
+                            <NumberBox Grid.Column="1" x:Name="PreprocessNpBox" Value="4" Minimum="1" Maximum="32"
+                                       SpinButtonPlacementMode="Compact" HorizontalAlignment="Left" MinWidth="120" />
+                        </Grid>
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <Button x:Name="PreprocessBtn" Content="前処理を実行" Click="PreprocessBtn_Click" />
+                            <TextBlock x:Name="PreprocessStatus" Text="未実行" VerticalAlignment="Center"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- Step2 特徴抽出 -->
+                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1" CornerRadius="8" Padding="16">
+                    <StackPanel Spacing="10">
+                        <TextBlock Text="Step 2: 特徴抽出" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+                        <Grid ColumnDefinitions="160,*,160,*" RowDefinitions="Auto" ColumnSpacing="8" RowSpacing="8">
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="GPU 番号" VerticalAlignment="Center" />
+                            <TextBox Grid.Row="0" Grid.Column="1" x:Name="ExtractGpusBox" Text="0"
+                                     PlaceholderText="例: 0 または 0-1-2" />
+                            <TextBlock Grid.Row="0" Grid.Column="2" Text="F0 手法" VerticalAlignment="Center" />
+                            <ComboBox Grid.Row="0" Grid.Column="3" x:Name="F0MethodCombo" HorizontalAlignment="Stretch"
+                                      SelectedIndex="4">
+                                <ComboBoxItem Content="pm" />
+                                <ComboBoxItem Content="harvest" />
+                                <ComboBoxItem Content="dio" />
+                                <ComboBoxItem Content="rmvpe" />
+                                <ComboBoxItem Content="rmvpe_gpu" />
+                            </ComboBox>
+                        </Grid>
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <Button x:Name="ExtractBtn" Content="特徴抽出を実行" Click="ExtractBtn_Click" />
+                            <TextBlock x:Name="ExtractStatus" Text="未実行" VerticalAlignment="Center"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- Step3 学習 -->
+                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1" CornerRadius="8" Padding="16">
+                    <StackPanel Spacing="10">
+                        <TextBlock Text="Step 3: 学習" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+                        <Grid ColumnDefinitions="160,*,160,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="8" RowSpacing="8">
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="総エポック数" VerticalAlignment="Center" />
+                            <NumberBox Grid.Row="0" Grid.Column="1" x:Name="TotalEpochBox" Value="20" Minimum="1"
+                                       SpinButtonPlacementMode="Compact" />
+                            <TextBlock Grid.Row="0" Grid.Column="2" Text="保存間隔" VerticalAlignment="Center" />
+                            <NumberBox Grid.Row="0" Grid.Column="3" x:Name="SaveEpochBox" Value="5" Minimum="1"
+                                       SpinButtonPlacementMode="Compact" />
+
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="バッチサイズ" VerticalAlignment="Center" />
+                            <NumberBox Grid.Row="1" Grid.Column="1" x:Name="BatchSizeBox" Value="4" Minimum="1"
+                                       SpinButtonPlacementMode="Compact" />
+                            <TextBlock Grid.Row="1" Grid.Column="2" Text="学習用 GPU 番号" VerticalAlignment="Center" />
+                            <TextBox Grid.Row="1" Grid.Column="3" x:Name="TrainGpusBox" Text="0" />
+
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="事前学習 G" VerticalAlignment="Center" />
+                            <TextBox Grid.Row="2" Grid.Column="1" x:Name="PretrainedGBox" />
+                            <TextBlock Grid.Row="2" Grid.Column="2" Text="事前学習 D" VerticalAlignment="Center" />
+                            <TextBox Grid.Row="2" Grid.Column="3" x:Name="PretrainedDBox" />
+                        </Grid>
+                        <StackPanel Orientation="Horizontal" Spacing="16">
+                            <CheckBox x:Name="IfSaveLatestCheck" Content="最新のみ保存" />
+                            <CheckBox x:Name="IfCacheGpuCheck" Content="GPU キャッシュ" />
+                            <CheckBox x:Name="IfSaveEveryWeightsCheck" Content="毎エポック small model 保存" />
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <Button x:Name="TrainBtn" Content="学習を開始" Click="TrainBtn_Click" />
+                            <TextBlock x:Name="TrainStatus" Text="未実行" VerticalAlignment="Center"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- Step4 インデックス作成 -->
+                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1" CornerRadius="8" Padding="16">
+                    <StackPanel Spacing="10">
+                        <TextBlock Text="Step 4: インデックス作成" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <Button x:Name="IndexBtn" Content="インデックス作成を実行" Click="IndexBtn_Click" />
+                            <TextBlock x:Name="IndexStatus" Text="未実行" VerticalAlignment="Center"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- ワンクリック学習 -->
+                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1" CornerRadius="8" Padding="16">
+                    <StackPanel Spacing="10">
+                        <TextBlock Text="ワンクリック学習" Style="{ThemeResource BodyStrongTextBlockStyle}" />
+                        <TextBlock Text="前処理 → 特徴抽出 → 学習 → インデックス作成 を一括実行します。"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   Style="{ThemeResource CaptionTextBlockStyle}" />
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <Button x:Name="OneClickBtn" Content="ワンクリック学習を実行"
+                                    Style="{ThemeResource AccentButtonStyle}" Click="OneClickBtn_Click" />
+                            <TextBlock x:Name="OneClickStatus" Text="未実行" VerticalAlignment="Center"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- ── 共通ログ欄 ───────────────────────────────────────── -->
+        <Border Grid.Row="2"
+                Background="{ThemeResource LayerFillColorDefaultBrush}"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                BorderThickness="0,1,0,0" Padding="16,8" MinHeight="160">
+            <Grid RowDefinitions="Auto,*">
+                <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,6">
+                    <TextBlock Grid.Column="0" Text="ログ" Style="{ThemeResource CaptionTextBlockStyle}"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
+                    <Button Grid.Column="1" Content="クリア" Height="24" Padding="8,0" Click="ClearLogBtn_Click" />
+                </Grid>
+                <ScrollViewer Grid.Row="1" x:Name="LogScrollViewer" VerticalScrollBarVisibility="Auto">
+                    <TextBox x:Name="LogBox" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap"
+                             BorderThickness="0" Background="Transparent" FontFamily="Consolas" FontSize="12" />
+                </ScrollViewer>
+            </Grid>
+        </Border>
+
+    </Grid>
+</Page>
